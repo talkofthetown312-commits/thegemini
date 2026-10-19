@@ -1,20 +1,36 @@
+
 name: TalkOS CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - main
   pull_request:
-    branches: [ "main" ]
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: talkos-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   validate-and-build:
-    name: Lint, Test & Build (Vite)
+    name: Lint, Test & Build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
       - name: Setup Node.js 22
         uses: actions/setup-node@v4
         with:
@@ -25,13 +41,17 @@ jobs:
       - name: Install Dependencies
         run: npm ci --no-audit --no-fund
 
-      - name: Type Check & Lint (TypeScript)
-        run: npm run lint
+      - name: TypeScript Check
+        run: npm run typecheck --if-present
 
-      - name: Run Unit Tests (Vitest)
-        run: npm run test
+      - name: Run ESLint
+        run: npm run lint --if-present
 
-      - name: Build Web & Server Bundle
+      - name: Run Unit Tests
+        run: npm run test -- --run
+
+      - name: Build Application
         run: npm run build
         env:
           NODE_ENV: production
+          
