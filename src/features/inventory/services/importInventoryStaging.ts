@@ -1,5 +1,6 @@
 import { collection, doc, getDocs, writeBatch } from 'firebase/firestore';
 import { db } from '../../../core/firebase/firebaseConfig';
+import { MASTER_INVENTORY } from '../data/masterInventory';
 import { validateInventoryStaging, type StagedInventoryItem, type StagedRecipe } from './inventoryStaging';
 
 /**
@@ -8,14 +9,16 @@ import { validateInventoryStaging, type StagedInventoryItem, type StagedRecipe }
  */
 export async function importInventoryStaging(
   catalogue: StagedInventoryItem[],
-  recipes: StagedRecipe[],
+  recipes: StagedRecipe[] = [],
   confirmed: boolean
 ): Promise<{ imported: number; skipped: number; recipesStaged: number }> {
   if (!confirmed) throw new Error('Explicit owner confirmation is required');
-  if (catalogue.length !== 144 || recipes.length !== 14) {
-    throw new Error('Expected complete 144-item catalogue and 14 approved recipe drafts');
+  if (catalogue.length !== 144 || (recipes.length !== 0 && recipes.length !== 14)) {
+    throw new Error('Expected complete 144-item catalogue and either zero or 14 approved recipe drafts');
   }
   const report = validateInventoryStaging(catalogue, recipes);
+  if (recipes.length === 0) report.issues = report.issues.filter(issue => !issue.startsWith('Expected 14 approved recipes'));
+  if (new Set(catalogue.map(item => item.id)).size !== 144) throw new Error('Duplicate catalogue identifiers');
   if (report.issues.length) throw new Error(report.issues.slice(0, 10).join('; '));
   if (!db) throw new Error('Firestore is not initialized');
 
@@ -60,4 +63,9 @@ export async function importInventoryStaging(
   }
   await batch.commit();
   return { imported: pending.length, skipped: catalogue.length - pending.length, recipesStaged: recipes.length };
+}
+
+/** Explicit catalogue-only import, with no draft recipes or live stock changes. */
+export function importMasterInventory(confirmed: boolean) {
+  return importInventoryStaging(MASTER_INVENTORY, [], confirmed);
 }
