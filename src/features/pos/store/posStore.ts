@@ -367,34 +367,41 @@ export const usePosStore = create<PosState>((set, get) => ({
           }
         }
 
-        // Combo Items: deduct stock for linked components
+        // Combo stock must be deducted from ingredient BOMs, not product IDs.
+        // If a recipe is missing, flag it for setup rather than writing invalid
+        // inventory transactions against the POS product collection.
         if (item.isCombo && item.comboComponents) {
+          const recipes = await manufacturingService.getRecipes().catch(() => []);
+          const menuProducts = get().products;
           for (const comp of item.comboComponents) {
-            let componentNameToDeduct = comp.name;
-            let componentItemId = comp.itemId;
-
-            if (comp.isChoice && item.selectedOption && comp.options) {
-              const selectedOpt = comp.options.find(o => o.name === item.selectedOption);
-              if (selectedOpt) {
-                componentNameToDeduct = selectedOpt.name;
-                componentItemId = selectedOpt.itemId;
-              }
+            const selected = comp.isChoice && item.selectedOption
+              ? comp.options?.find(o => o.name === item.selectedOption)
+              : undefined;
+            const productId = selected?.itemId || comp.itemId;
+            const componentSize = selected?.size || comp.size || 'Standard';
+            const product = menuProducts.find(p => p.id === productId);
+            const recipe = recipes.find(r => r.id === product?.recipeId);
+            if (!recipe) {
+              console.warn('Combo component recipe missing; inventory not deducted:', productId);
+              continue;
             }
-
-            try {
-              const componentQty = (comp.quantity || 1) * item.quantity;
+            const portionScale = componentSize === 'Small' ? 0.35 :
+              componentSize === 'Medium' ? 0.60 : 1;
+            const units = (comp.quantity || 1) * item.quantity;
+            const yieldQty = recipe.yieldQuantity || 1;
+            for (const ingredient of recipe.ingredients) {
+              if (!ingredient.inventoryItemId) continue;
+              const qty = ingredient.quantity * units * portionScale / yieldQty;
               await inventoryService.recordTransaction({
-                itemId: componentItemId,
+                itemId: ingredient.inventoryItemId,
                 type: 'STOCK_OUT',
-                quantity: componentQty,
+                quantity: qty,
                 referenceId: order.id,
-                notes: `POS Combo Sale (${order.orderNumber}): ${item.name} -> Component: ${componentNameToDeduct}`,
-                unitCost: item.unitCost ? item.unitCost / 2 : 0,
-                totalCost: 0,
+                notes: `POS Combo (${order.orderNumber}): ${product?.name || productId} ${componentSize}`,
+                unitCost: ingredient.costPerUnit || 0,
+                totalCost: (ingredient.costPerUnit || 0) * qty,
                 performedBy: 'System'
-              }).catch(e => console.error('Error deducting combo component stock:', e));
-            } catch (err) {
-              console.warn('Combo inventory deduction notice:', err);
+              }).catch(e => console.error('Combo ingredient deduction failed:', e));
             }
           }
         }

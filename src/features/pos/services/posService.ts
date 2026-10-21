@@ -7,46 +7,40 @@ class PosService {
   private hasInitializedMenu = false;
 
   async getProducts(): Promise<Product[]> {
-    // 1. Prioritize authoritative backend API (cross-platform, zero 403 errors, consistent across Android, iOS, Desktop & Web)
+    // The approved code menu is the current POS release catalog. Keep availability
+    // flags from Firestore, but do not silently overwrite prices on every page load.
+    // A separate controlled migration must persist approved prices/recipes to Firestore.
+    const released = INITIAL_MENU_ITEMS.filter(p =>
+      p.active !== false && p.isAvailable !== false && !p.isSubItem
+    );
+    const releasedIds = new Set(released.map(p => p.id));
+    let remote: Product[] = [];
     try {
       const res = await fetch('/api/products');
       if (res.ok) {
         const data = await res.json();
-        if (data && data.products && Array.isArray(data.products) && data.products.length > 0) {
-          return data.products;
-        }
+        if (Array.isArray(data?.products)) remote = data.products;
       }
     } catch {
-      // Offline fallback
+      // Static Firebase Hosting has no Express API.
     }
-
-    // 2. Query Firestore if available
-    if (db) {
+    if (remote.length === 0 && db) {
       try {
-        const q = query(collection(db, 'pos_products'));
-        const snapshot = await getDocs(q);
-
-        // ONLY seed/sync to Firestore if a staff user is logged in (prevents 403 Forbidden in guest kiosk mode)
-        if (auth.currentUser && (snapshot.empty || !this.hasInitializedMenu)) {
-          await this.syncInitialMenu(snapshot.empty);
-          this.hasInitializedMenu = true;
-          const updatedSnap = await getDocs(q);
-          if (!updatedSnap.empty) {
-            return updatedSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
-          }
-        }
-
-        if (!snapshot.empty) {
-          const products = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
-          if (products.length > 0) return products;
-        }
+        const snapshot = await getDocs(query(collection(db, 'pos_products')));
+        remote = snapshot.docs.map(record => ({ ...record.data(), id: record.id } as Product));
       } catch (error) {
-        console.warn("Firestore fetch error, falling back to local menu items:", error);
+        console.warn('Firestore menu unavailable; using released menu:', error);
       }
     }
-
-    // 3. Fallback to comprehensive built-in menu items
-    return INITIAL_MENU_ITEMS.filter(p => p.active !== false && p.isAvailable !== false && !p.isSubItem);
+    const byId = new Map(remote.map(p => [p.id, p]));
+    return released.filter(p => {
+      const saved = byId.get(p.id);
+      return saved?.isAvailable !== false;
+    }).map(p => ({
+      ...p,
+      // Preserve a Firestore-linked recipe where one exists; do not invent links.
+      recipeId: byId.get(p.id)?.recipeId || p.recipeId
+    }));
   }
 
   async syncInitialMenu(isCollectionEmpty = false): Promise<void> {
