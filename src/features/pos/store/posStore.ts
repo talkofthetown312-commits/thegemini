@@ -411,6 +411,7 @@ export const usePosStore = create<PosState>((set, get) => ({
       }
 
       // 2. Push to KDS Ticket
+      let kitchenWarning: string | null = null;
       try {
         await kdsService.createTicket({
           orderId: order.id,
@@ -439,7 +440,8 @@ export const usePosStore = create<PosState>((set, get) => ({
           }))
         });
       } catch (kdsErr) {
-        console.warn('Could not push order to KDS:', kdsErr);
+        console.error('Paid order needs manual kitchen attention:', order.orderNumber, kdsErr);
+        kitchenWarning = `Order ${order.orderNumber} was saved and paid, but its kitchen ticket was NOT confirmed. Notify the kitchen manually and retry ticket dispatch before preparing another bill.`;
       }
 
       // Update order history
@@ -453,6 +455,7 @@ export const usePosStore = create<PosState>((set, get) => ({
         discount: null,
         loading: false, 
         lastCompletedOrder: order,
+        error: kitchenWarning,
         ordersHistory: updatedHistory
       });
 
