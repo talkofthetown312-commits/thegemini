@@ -109,22 +109,23 @@ class KdsService {
   }
 
   async createTicket(ticketData: Omit<Ticket, 'id' | 'createdAt'>): Promise<Ticket> {
+    if (!db) throw new Error('Firestore is not configured. Kitchen ticket was not saved.');
+
+    // Deterministic ID makes retries for the same paid order idempotent.
+    const id = `t_${ticketData.orderId}`;
+    const ticketRef = doc(db, 'tickets', id);
+    const existing = await getDocs(query(collection(db, 'tickets'), where('orderId', '==', ticketData.orderId)));
+    if (!existing.empty) {
+      const saved = existing.docs[0];
+      return { ...saved.data(), id: saved.id } as Ticket;
+    }
+
     const newTicket: Ticket = {
       ...ticketData,
-      id: `t_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      id,
       createdAt: new Date().toISOString()
     };
-    if (db) {
-      try {
-        const cleanTicket = JSON.parse(JSON.stringify(newTicket));
-        await Promise.race([
-          setDoc(doc(db, 'tickets', newTicket.id), cleanTicket),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout writing ticket to Firestore')), 1500))
-        ]);
-      } catch (err) {
-        console.warn("Could not save ticket to Firestore:", err);
-      }
-    }
+    await setDoc(ticketRef, JSON.parse(JSON.stringify(newTicket)));
     return newTicket;
   }
 
