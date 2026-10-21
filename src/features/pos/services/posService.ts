@@ -4,7 +4,6 @@ import { Product, Order, MenuItemSize } from '../models/pos';
 import { INITIAL_MENU_ITEMS, getAllMenuItemSizes } from '../data/menuData';
 
 class PosService {
-  private hasInitializedMenu = false;
 
   async getProducts(): Promise<Product[]> {
     // The approved code menu is the current POS release catalog. Keep availability
@@ -13,7 +12,6 @@ class PosService {
     const released = INITIAL_MENU_ITEMS.filter(p =>
       p.active !== false && p.isAvailable !== false && !p.isSubItem
     );
-    const releasedIds = new Set(released.map(p => p.id));
     let remote: Product[] = [];
     try {
       const res = await fetch('/api/products');
@@ -116,76 +114,38 @@ class PosService {
     return newProduct;
   }
 
-  private localOrders: Order[] = [];
-
   async getOrders(): Promise<Order[]> {
-    if (!db) return this.localOrders;
-    try {
-      const q = query(collection(db, 'pos_orders'));
-      const snapshot = await getDocs(q);
-      const orders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
-      // Sort newest first
-      orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      if (orders.length > 0) {
-        this.localOrders = orders;
-        return orders;
-      }
-      return this.localOrders;
-    } catch (err) {
-      console.warn("Falling back to local orders due to error:", err);
-      return this.localOrders;
-    }
+    if (!db) throw new Error('Firestore is not configured. Order history is unavailable.');
+    const snapshot = await getDocs(query(collection(db, 'pos_orders')));
+    return snapshot.docs
+      .map(record => ({ ...record.data(), id: record.id } as Order))
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }
 
   async updateOrderStatus(orderId: string, status: Order['status'], voidReason?: string): Promise<void> {
-    const orderIndex = this.localOrders.findIndex(o => o.id === orderId);
-    if (orderIndex > -1) {
-      this.localOrders[orderIndex] = {
-        ...this.localOrders[orderIndex],
-        status,
-        ...(voidReason ? { voidReason } : {})
-      };
-    }
-
-    if (db) {
-      try {
-        await Promise.race([
-          updateDoc(doc(db, 'pos_orders', orderId), {
-            status,
-            ...(voidReason ? { voidReason } : {}),
-            updatedAt: new Date().toISOString()
-          }),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout writing to Firestore')), 1500))
-        ]);
-      } catch (err) {
-        console.warn("Could not update order status in Firestore:", err);
-      }
-    }
+    if (!db) throw new Error('Firestore is not configured. Cannot update order status.');
+    await updateDoc(doc(db, 'pos_orders', orderId), {
+      status,
+      ...(voidReason ? { voidReason } : {}),
+      updatedAt: new Date().toISOString()
+    });
   }
 
   async createOrder(orderData: Omit<Order, 'id' | 'createdAt' | 'orderNumber'>): Promise<Order> {
+    if (!db) throw new Error('Firestore is not configured. Checkout is unavailable.');
+    if (!auth.currentUser) throw new Error('Sign in before completing a sale.');
+
+    // Allocate a stable ID before writing, so a retry can use the same identity.
+    // Do not report payment/order completion unless Firestore acknowledges the write.
+    const id = doc(collection(db, 'pos_orders')).id;
     const newOrder: Order = {
       ...orderData,
-      id: `ord_${Date.now()}`,
-      orderNumber: `ORD-${Math.floor(10000 + Math.random() * 90000)}`,
+      id,
+      orderNumber: `ORD-${id.slice(0, 8).toUpperCase()}`,
       createdAt: new Date().toISOString()
     };
-
-    this.localOrders.unshift(newOrder);
-
-    if (db) {
-      try {
-        // Strip undefined values for Firestore serialization and apply timeout protection
-        const cleanOrder = JSON.parse(JSON.stringify(newOrder));
-        await Promise.race([
-          setDoc(doc(db, 'pos_orders', newOrder.id), cleanOrder),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout writing to Firestore')), 1500))
-        ]);
-      } catch (err) {
-        console.warn("Could not save order to Firestore (continuing with local order):", err);
-      }
-    }
-
+    const cleanOrder = JSON.parse(JSON.stringify(newOrder));
+    await setDoc(doc(db, 'pos_orders', id), cleanOrder);
     return newOrder;
   }
 }
