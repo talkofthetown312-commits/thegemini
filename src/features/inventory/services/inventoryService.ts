@@ -240,11 +240,6 @@ class InventoryService {
       if (newTransaction.batchId) {
         batchRef = doc(db, 'inventory_batches', newTransaction.batchId);
         batchDoc = await transaction.get(batchRef);
-        if (batchDoc.exists()) {
-           const batchData = batchDoc.data() as ItemBatch;
-           const newBatchStock = batchData.currentQuantity + stockChange;
-           // Batch update is written below after all reads.
-        }
       }
 
       transaction.update(itemRef, {
