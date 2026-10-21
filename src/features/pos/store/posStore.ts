@@ -287,6 +287,9 @@ export const usePosStore = create<PosState>((set, get) => ({
   },
 
   completeCheckout: async ({ method, details }) => {
+    // Lock synchronously before any await. Rapid taps or keyboard shortcuts must
+    // not create multiple paid orders from the same cart.
+    if (get().loading) throw new Error('Checkout is already processing. Please wait.');
     const { cart, orderType, tableNumber, customerName, customerPhone, orderNotes, discount } = get();
     if (cart.length === 0) throw new Error("Cannot checkout empty cart");
 
