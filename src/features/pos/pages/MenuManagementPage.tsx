@@ -16,7 +16,7 @@ export function MenuManagementPage() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const reload = async () => {
-    const items = await posService.getProducts();
+    const items = await posService.getAllProducts();
     setProducts(items);
   };
   useEffect(() => { reload().catch(e => setError(String(e))); }, []);
