@@ -1,8 +1,8 @@
-import { collection, query, getDocs, doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, query, getDocs, doc, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
 import { db, auth } from '../../../core/firebase/firebaseConfig';
 import { Product, Order, MenuItemSize } from '../models/pos';
 import { INITIAL_MENU_ITEMS, getAllMenuItemSizes } from '../data/menuData';
-import { visibleCustomerProducts, sizesForCustomerProduct } from './customerCatalogue';
+import { visibleCustomerProducts, sizesForCustomerProduct, validateCustomerProduct } from './customerCatalogue';
 
 class PosService {
 
@@ -55,6 +55,7 @@ class PosService {
   }
 
   async addProduct(productData: Omit<Product, 'id'>): Promise<Product> {
+    validateCustomerProduct({ ...productData, id: 'new' });
     const newProduct: Product = {
       ...productData,
       id: db ? doc(collection(db, 'pos_products')).id : `prod_${crypto.randomUUID()}`
@@ -76,6 +77,24 @@ class PosService {
     }
 
     return newProduct;
+  }
+
+  async updateProduct(product: Product): Promise<void> {
+    if (!db || !auth.currentUser) throw new Error('Sign in to edit menu items.');
+    validateCustomerProduct(product);
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'pos_products', product.id), product);
+    for (const size of product.sizes) {
+      const id = product.id + '_' + size.size.toLowerCase();
+      batch.set(doc(db, 'menu_item_sizes', id), { ...size, id, item_id: product.id });
+    }
+    await batch.commit();
+  }
+
+  async setProductAvailability(productId: string, available: boolean): Promise<void> {
+    if (!db || !auth.currentUser) throw new Error('Sign in to change menu availability.');
+    if (!productId.trim()) throw new Error('Missing product ID.');
+    await updateDoc(doc(db, 'pos_products', productId), { isAvailable: available });
   }
 
   async getOrders(): Promise<Order[]> {
