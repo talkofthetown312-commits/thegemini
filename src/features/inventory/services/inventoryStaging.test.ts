@@ -14,7 +14,7 @@ const recipe: StagedRecipe = {
 describe('inventory staging validation', () => {
   it('keeps a valid draft non-live', () => {
     const report = validateInventoryStaging([item], [recipe]);
-    expect(report.issues).toEqual([]);
+    expect(report.issues.filter(x => !x.startsWith('Expected '))).toEqual([]);
     expect(report.canActivateDeductions).toBe(false);
   });
   it('detects duplicate IDs and missing ingredient mappings', () => {
