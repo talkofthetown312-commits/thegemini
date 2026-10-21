@@ -6,70 +6,70 @@ export const INITIAL_MENU_ITEMS: Product[] = [
     id: 'prod_chow_veg',
     name: 'Veg Chowmein',
     category: 'Chowmein',
-    price: 30, // Starting price
+    price: 60, // Small entry price; Large fixed to original costing workbook
     isAvailable: true,
     active: true,
-    costPrice: 15,
+    costPrice: 16.77, // Modeled estimate; confirm supplier costs and yield
     sizes: [
-      { item_id: 'prod_chow_veg', size: 'Small', price: 30, cost_price: 15, active: true },
-      { item_id: 'prod_chow_veg', size: 'Medium', price: 45, cost_price: 22, active: true },
-      { item_id: 'prod_chow_veg', size: 'Large', price: 70, cost_price: 32, active: true },
+      { item_id: 'prod_chow_veg', size: 'Small', price: 60, cost_price: 16.77, active: true },
+      { item_id: 'prod_chow_veg', size: 'Medium', price: 80, cost_price: 22.87, active: true },
+      { item_id: 'prod_chow_veg', size: 'Large', price: 110, cost_price: 30.49, active: true },
     ]
   },
   {
     id: 'prod_chow_egg',
     name: 'Egg Chowmein',
     category: 'Chowmein',
-    price: 40,
+    price: 70, // Small entry price; Large fixed to original costing workbook
     isAvailable: true,
     active: true,
-    costPrice: 18,
+    costPrice: 23.44, // Modeled estimate; confirm supplier costs and yield
     sizes: [
-      { item_id: 'prod_chow_egg', size: 'Small', price: 40, cost_price: 18, active: true },
-      { item_id: 'prod_chow_egg', size: 'Medium', price: 55, cost_price: 26, active: true },
-      { item_id: 'prod_chow_egg', size: 'Large', price: 75, cost_price: 36, active: true },
+      { item_id: 'prod_chow_egg', size: 'Small', price: 70, cost_price: 23.44, active: true },
+      { item_id: 'prod_chow_egg', size: 'Medium', price: 90, cost_price: 27.46, active: true },
+      { item_id: 'prod_chow_egg', size: 'Large', price: 130, cost_price: 33.49, active: true },
     ]
   },
   {
     id: 'prod_chow_chicken',
     name: 'Chicken Chowmein',
     category: 'Chowmein',
-    price: 45,
+    price: 80, // Small entry price; Large fixed to original costing workbook
     isAvailable: true,
     active: true,
-    costPrice: 22,
+    costPrice: 26.12, // Modeled estimate; confirm supplier costs and yield
     sizes: [
-      { item_id: 'prod_chow_chicken', size: 'Small', price: 45, cost_price: 22, active: true },
-      { item_id: 'prod_chow_chicken', size: 'Medium', price: 70, cost_price: 34, active: true },
-      { item_id: 'prod_chow_chicken', size: 'Large', price: 105, cost_price: 50, active: true },
+      { item_id: 'prod_chow_chicken', size: 'Small', price: 80, cost_price: 26.12, active: true },
+      { item_id: 'prod_chow_chicken', size: 'Medium', price: 110, cost_price: 35.62, active: true },
+      { item_id: 'prod_chow_chicken', size: 'Large', price: 150, cost_price: 47.49, active: true },
     ]
   },
   {
     id: 'prod_chow_pork',
     name: 'Pork Chowmein',
     category: 'Chowmein',
-    price: 55,
+    price: 80, // Small entry price; Large fixed to original costing workbook
     isAvailable: true,
     active: true,
-    costPrice: 28,
+    costPrice: 33.6, // Modeled estimate; confirm supplier costs and yield
     sizes: [
-      { item_id: 'prod_chow_pork', size: 'Small', price: 55, cost_price: 28, active: true },
-      { item_id: 'prod_chow_pork', size: 'Medium', price: 90, cost_price: 45, active: true },
-      { item_id: 'prod_chow_pork', size: 'Large', price: 135, cost_price: 65, active: true },
+      { item_id: 'prod_chow_pork', size: 'Small', price: 80, cost_price: 33.6, active: true },
+      { item_id: 'prod_chow_pork', size: 'Medium', price: 110, cost_price: 45.82, active: true },
+      { item_id: 'prod_chow_pork', size: 'Large', price: 160, cost_price: 61.09, active: true },
     ]
   },
   {
     id: 'prod_chow_mixed',
     name: 'Mixed Chowmein (Chicken+Pork)',
     category: 'Chowmein',
-    price: 50,
+    price: 100, // Small entry price; Large fixed to original costing workbook
     isAvailable: true,
     active: true,
-    costPrice: 25,
+    costPrice: 29.86, // Modeled estimate; confirm supplier costs and yield
     sizes: [
-      { item_id: 'prod_chow_mixed', size: 'Small', price: 50, cost_price: 25, active: true },
-      { item_id: 'prod_chow_mixed', size: 'Medium', price: 80, cost_price: 40, active: true },
-      { item_id: 'prod_chow_mixed', size: 'Large', price: 120, cost_price: 58, active: true },
+      { item_id: 'prod_chow_mixed', size: 'Small', price: 100, cost_price: 29.86, active: true },
+      { item_id: 'prod_chow_mixed', size: 'Medium', price: 140, cost_price: 40.72, active: true },
+      { item_id: 'prod_chow_mixed', size: 'Large', price: 200, cost_price: 54.29, active: true },
     ]
   },
 
@@ -78,70 +78,70 @@ export const INITIAL_MENU_ITEMS: Product[] = [
     id: 'prod_fr_veg',
     name: 'Veg Fried Rice',
     category: 'Fried Rice',
-    price: 30,
+    price: 70, // Small entry price; Large fixed to original costing workbook
     isAvailable: true,
     active: true,
-    costPrice: 14,
+    costPrice: 15.45, // Modeled estimate; confirm supplier costs and yield
     sizes: [
-      { item_id: 'prod_fr_veg', size: 'Small', price: 30, cost_price: 14, active: true },
-      { item_id: 'prod_fr_veg', size: 'Medium', price: 45, cost_price: 21, active: true },
-      { item_id: 'prod_fr_veg', size: 'Large', price: 60, cost_price: 28, active: true },
+      { item_id: 'prod_fr_veg', size: 'Small', price: 70, cost_price: 15.45, active: true },
+      { item_id: 'prod_fr_veg', size: 'Medium', price: 90, cost_price: 21.07, active: true },
+      { item_id: 'prod_fr_veg', size: 'Large', price: 130, cost_price: 28.09, active: true },
     ]
   },
   {
     id: 'prod_fr_egg',
     name: 'Egg Fried Rice',
     category: 'Fried Rice',
-    price: 35,
+    price: 70, // Small entry price; Large fixed to original costing workbook
     isAvailable: true,
     active: true,
-    costPrice: 17,
+    costPrice: 21.76, // Modeled estimate; confirm supplier costs and yield
     sizes: [
-      { item_id: 'prod_fr_egg', size: 'Small', price: 35, cost_price: 17, active: true },
-      { item_id: 'prod_fr_egg', size: 'Medium', price: 50, cost_price: 24, active: true },
-      { item_id: 'prod_fr_egg', size: 'Large', price: 70, cost_price: 34, active: true },
+      { item_id: 'prod_fr_egg', size: 'Small', price: 70, cost_price: 21.76, active: true },
+      { item_id: 'prod_fr_egg', size: 'Medium', price: 100, cost_price: 25.49, active: true },
+      { item_id: 'prod_fr_egg', size: 'Large', price: 140, cost_price: 31.09, active: true },
     ]
   },
   {
     id: 'prod_fr_chicken',
     name: 'Chicken Fried Rice',
     category: 'Fried Rice',
-    price: 40,
+    price: 80, // Small entry price; Large fixed to original costing workbook
     isAvailable: true,
     active: true,
-    costPrice: 20,
+    costPrice: 24.8, // Modeled estimate; confirm supplier costs and yield
     sizes: [
-      { item_id: 'prod_fr_chicken', size: 'Small', price: 40, cost_price: 20, active: true },
-      { item_id: 'prod_fr_chicken', size: 'Medium', price: 65, cost_price: 32, active: true },
-      { item_id: 'prod_fr_chicken', size: 'Large', price: 100, cost_price: 48, active: true },
+      { item_id: 'prod_fr_chicken', size: 'Small', price: 80, cost_price: 24.8, active: true },
+      { item_id: 'prod_fr_chicken', size: 'Medium', price: 110, cost_price: 33.82, active: true },
+      { item_id: 'prod_fr_chicken', size: 'Large', price: 160, cost_price: 45.09, active: true },
     ]
   },
   {
     id: 'prod_fr_pork',
     name: 'Pork Fried Rice',
     category: 'Fried Rice',
-    price: 55,
+    price: 90, // Small entry price; Large fixed to original costing workbook
     isAvailable: true,
     active: true,
-    costPrice: 28,
+    costPrice: 32.28, // Modeled estimate; confirm supplier costs and yield
     sizes: [
-      { item_id: 'prod_fr_pork', size: 'Small', price: 55, cost_price: 28, active: true },
-      { item_id: 'prod_fr_pork', size: 'Medium', price: 85, cost_price: 42, active: true },
-      { item_id: 'prod_fr_pork', size: 'Large', price: 130, cost_price: 62, active: true },
+      { item_id: 'prod_fr_pork', size: 'Small', price: 90, cost_price: 32.28, active: true },
+      { item_id: 'prod_fr_pork', size: 'Medium', price: 120, cost_price: 44.02, active: true },
+      { item_id: 'prod_fr_pork', size: 'Large', price: 170, cost_price: 58.69, active: true },
     ]
   },
   {
     id: 'prod_fr_mixed',
     name: 'Mixed Fried Rice (Chicken+Pork)',
     category: 'Fried Rice',
-    price: 45,
+    price: 110, // Small entry price; Large fixed to original costing workbook
     isAvailable: true,
     active: true,
-    costPrice: 23,
+    costPrice: 28.54, // Modeled estimate; confirm supplier costs and yield
     sizes: [
-      { item_id: 'prod_fr_mixed', size: 'Small', price: 45, cost_price: 23, active: true },
-      { item_id: 'prod_fr_mixed', size: 'Medium', price: 75, cost_price: 38, active: true },
-      { item_id: 'prod_fr_mixed', size: 'Large', price: 115, cost_price: 56, active: true },
+      { item_id: 'prod_fr_mixed', size: 'Small', price: 110, cost_price: 28.54, active: true },
+      { item_id: 'prod_fr_mixed', size: 'Medium', price: 150, cost_price: 38.92, active: true },
+      { item_id: 'prod_fr_mixed', size: 'Large', price: 210, cost_price: 51.89, active: true },
     ]
   },
 
@@ -208,77 +208,71 @@ export const INITIAL_MENU_ITEMS: Product[] = [
     ]
   },
 
-  // ==================== COMBO MEALS ====================
+  // ==================== MODULAR COMBO MEALS ====================
+  // Each combo is a bundle of existing full-size Chilly and standard Medium base dishes.
+  // No separate small/medium Chilly recipe is introduced.
   {
-    id: 'prod_combo_duo',
-    name: 'Duo Combo',
+    id: 'prod_combo_chicken_noodle_feast',
+    name: 'Chicken Signature Noodle Feast',
     category: 'Combo Meals',
-    price: 75,
+    price: 390,
     isAvailable: true,
     active: true,
-    costPrice: 42,
+    costPrice: 131.05, // Provisional estimate; verify BOM, packaging and actual yields
     isCombo: true,
-    comboDescription: 'Small Chowmein + Small Fried Rice (Chicken)',
-    sizes: [
-      { item_id: 'prod_combo_duo', size: 'Standard', price: 75, cost_price: 42, active: true }
-    ],
+    comboDescription: 'Full Chicken Chilly Dry + 2 Medium Veg Chowmein',
+    sizes: [{ item_id: 'prod_combo_chicken_noodle_feast', size: 'Standard', price: 390, cost_price: 131.05, active: true }],
     comboComponents: [
-      { itemId: 'prod_chow_chicken', name: 'Small Chicken Chowmein', size: 'Small', quantity: 1 },
-      { itemId: 'prod_fr_chicken', name: 'Small Chicken Fried Rice', size: 'Small', quantity: 1 }
+      { itemId: 'prod_chilly_chicken_dry', name: 'Chicken Chilly Dry', size: 'Standard', quantity: 1 },
+      { itemId: 'prod_chow_veg', name: 'Veg Chowmein', size: 'Medium', quantity: 2 }
     ]
   },
   {
-    id: 'prod_combo_signature',
-    name: 'Signature Combo',
+    id: 'prod_combo_chicken_rice_feast',
+    name: 'Chicken Signature Rice Feast',
     category: 'Combo Meals',
-    price: 110,
+    price: 440,
     isAvailable: true,
     active: true,
-    costPrice: 56,
+    costPrice: 113.32, // Provisional estimate; verify BOM, packaging and actual yields
     isCombo: true,
-    comboDescription: 'Medium Chowmein OR Fried Rice (Chicken) + Chilly Chicken Bites',
-    sizes: [
-      { item_id: 'prod_combo_signature', size: 'Standard', price: 110, cost_price: 56, active: true }
-    ],
+    comboDescription: 'Full Chicken Chilly Gravy + 2 Medium Veg Fried Rice',
+    sizes: [{ item_id: 'prod_combo_chicken_rice_feast', size: 'Standard', price: 440, cost_price: 113.32, active: true }],
     comboComponents: [
-      {
-        itemId: 'choice_sig_base',
-        name: 'Medium Chicken Chowmein or Fried Rice',
-        quantity: 1,
-        isChoice: true,
-        options: [
-          { itemId: 'prod_chow_chicken', name: 'Medium Chicken Chowmein', size: 'Medium' },
-          { itemId: 'prod_fr_chicken', name: 'Medium Chicken Fried Rice', size: 'Medium' }
-        ]
-      },
-      { itemId: 'prod_chilly_bites', name: 'Chilly Chicken Bites', size: 'Standard', quantity: 1 }
+      { itemId: 'prod_chilly_chicken_gravy', name: 'Chicken Chilly Gravy', size: 'Standard', quantity: 1 },
+      { itemId: 'prod_fr_veg', name: 'Veg Fried Rice', size: 'Medium', quantity: 2 }
     ]
   },
   {
-    id: 'prod_combo_family',
-    name: 'Family Combo',
+    id: 'prod_combo_pork_noodle_feast',
+    name: 'Pork Signature Noodle Feast',
     category: 'Combo Meals',
-    price: 330,
+    price: 420,
     isAvailable: true,
     active: true,
-    costPrice: 155,
+    costPrice: 146.4, // Provisional estimate; verify BOM, packaging and actual yields
     isCombo: true,
-    comboDescription: 'Large Chowmein OR Fried Rice (Chicken) + Full Chicken Chilly (Dry)',
-    sizes: [
-      { item_id: 'prod_combo_family', size: 'Standard', price: 330, cost_price: 155, active: true }
-    ],
+    comboDescription: 'Full Pork Chilly Dry + 2 Medium Veg Chowmein',
+    sizes: [{ item_id: 'prod_combo_pork_noodle_feast', size: 'Standard', price: 420, cost_price: 146.4, active: true }],
     comboComponents: [
-      {
-        itemId: 'choice_fam_base',
-        name: 'Large Chicken Chowmein or Fried Rice',
-        quantity: 1,
-        isChoice: true,
-        options: [
-          { itemId: 'prod_chow_chicken', name: 'Large Chicken Chowmein', size: 'Large' },
-          { itemId: 'prod_fr_chicken', name: 'Large Chicken Fried Rice', size: 'Large' }
-        ]
-      },
-      { itemId: 'prod_chilly_chicken_dry', name: 'Full Chicken Chilly (Dry)', size: 'Standard', quantity: 1 }
+      { itemId: 'prod_chilly_pork_dry', name: 'Pork Chilly Dry', size: 'Standard', quantity: 1 },
+      { itemId: 'prod_chow_veg', name: 'Veg Chowmein', size: 'Medium', quantity: 2 }
+    ]
+  },
+  {
+    id: 'prod_combo_pork_rice_feast',
+    name: 'Pork Signature Rice Feast',
+    category: 'Combo Meals',
+    price: 460,
+    isAvailable: true,
+    active: true,
+    costPrice: 143.92, // Provisional estimate; verify BOM, packaging and actual yields
+    isCombo: true,
+    comboDescription: 'Full Pork Chilly Gravy + 2 Medium Veg Fried Rice',
+    sizes: [{ item_id: 'prod_combo_pork_rice_feast', size: 'Standard', price: 460, cost_price: 143.92, active: true }],
+    comboComponents: [
+      { itemId: 'prod_chilly_pork_gravy', name: 'Pork Chilly Gravy', size: 'Standard', quantity: 1 },
+      { itemId: 'prod_fr_veg', name: 'Veg Fried Rice', size: 'Medium', quantity: 2 }
     ]
   },
 
