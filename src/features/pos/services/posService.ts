@@ -21,9 +21,12 @@ class PosService {
 
   async syncInitialMenu(isCollectionEmpty = false): Promise<void> {
     // Never attempt Firestore write if no db or if user is unauthenticated (prevents 403)
-    if (!db || !auth.currentUser) return;
+    if (!db || !auth.currentUser || !isCollectionEmpty) return;
 
     try {
+      // Seed only a genuinely empty customer menu; never overwrite configured products.
+      const existing = await getDocs(query(collection(db, 'pos_products')));
+      if (!existing.empty) return;
       // Upsert products to pos_products
       for (const item of INITIAL_MENU_ITEMS) {
         await setDoc(doc(db, 'pos_products', item.id), item, { merge: true });
