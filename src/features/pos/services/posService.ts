@@ -63,32 +63,11 @@ class PosService {
   }
 
   async getMenuItemSizes(itemId?: string): Promise<MenuItemSize[]> {
-    // 1. Check API endpoint
-    try {
-      const res = await fetch('/api/products/sizes');
-      if (res.ok) {
-        const data = await res.json();
-        if (data && data.sizes && Array.isArray(data.sizes)) {
-          return itemId ? data.sizes.filter((s: MenuItemSize) => s.item_id === itemId) : data.sizes;
-        }
-      }
-    } catch {}
-
-    // 2. Query Firestore if available
-    if (db) {
-      try {
-        const q = query(collection(db, 'menu_item_sizes'));
-        const snapshot = await getDocs(q);
-        if (!snapshot.empty) {
-          const sizes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as MenuItemSize));
-          return itemId ? sizes.filter(s => s.item_id === itemId) : sizes;
-        }
-      } catch {}
-    }
-
-    // 3. Fallback
-    const sizes = getAllMenuItemSizes();
-    return itemId ? sizes.filter(s => s.item_id === itemId) : sizes;
+    // Keep the size/price selector aligned with the released POS catalog.
+    // Older Firestore size rows may contain superseded prices; mixing the two
+    // sources could bill a different amount than the displayed menu.
+    const released = getAllMenuItemSizes();
+    return itemId ? released.filter(size => size.item_id === itemId) : released;
   }
 
   async addProduct(productData: Omit<Product, 'id'>): Promise<Product> {
