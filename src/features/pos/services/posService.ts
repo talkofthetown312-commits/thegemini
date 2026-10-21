@@ -57,27 +57,21 @@ class PosService {
   }
 
   async addProduct(productData: Omit<Product, 'id'>): Promise<Product> {
+    if (!db || !auth.currentUser) throw new Error('Sign in to save a customer menu item.');
     validateCustomerProduct({ ...productData, id: 'new' });
+    const id = doc(collection(db, 'pos_products')).id;
     const newProduct: Product = {
       ...productData,
-      id: db ? doc(collection(db, 'pos_products')).id : `prod_${crypto.randomUUID()}`
+      id,
+      sizes: productData.sizes.map(size => ({ ...size, item_id: id }))
     };
-
-    if (!db || !auth.currentUser) throw new Error('Sign in to save a customer menu item.');
-    if (db) {
-      await setDoc(doc(db, 'pos_products', newProduct.id), newProduct);
-      if (newProduct.sizes) {
-        for (const s of newProduct.sizes) {
-          const sizeDocId = `${newProduct.id}_${s.size.toLowerCase()}`;
-          await setDoc(doc(db, 'menu_item_sizes', sizeDocId), {
-            ...s,
-            id: sizeDocId,
-            item_id: newProduct.id
-          });
-        }
-      }
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'pos_products', id), newProduct);
+    for (const size of newProduct.sizes) {
+      const sizeId = id + '_' + size.size.toLowerCase();
+      batch.set(doc(db, 'menu_item_sizes', sizeId), { ...size, id: sizeId });
     }
-
+    await batch.commit();
     return newProduct;
   }
 
