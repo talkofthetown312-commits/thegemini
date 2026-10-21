@@ -17,6 +17,7 @@ import { DashboardPage } from '../features/dashboard/pages/DashboardPage';
 
 // POS
 import { PosPage } from '../features/pos/pages/PosPage';
+import { MenuManagementPage } from '../features/pos/pages/MenuManagementPage';
 
 // KDS
 import { KdsPage } from '../features/kds/pages/KdsPage';
@@ -105,6 +106,10 @@ export const router = createBrowserRouter([
       {
         path: 'pos',
         element: <PosPage />,
+      },
+      {
+        path: 'menu',
+        element: <MenuManagementPage />,
       },
       {
         path: 'kds',
