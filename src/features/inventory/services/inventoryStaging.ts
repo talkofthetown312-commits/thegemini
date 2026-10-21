@@ -34,7 +34,7 @@ export interface StagingReport {
   issues: string[];
   canActivateDeductions: boolean;
 }
-const approvedDish = /^(veg|egg|chicken|pork|mixed) (chowmein|fried rice)$|^(chicken|pork) chilly \((dry|gravy)\)$/i;
+const approvedDish = /^(veg|egg|chicken|pork|mixed) (chowmein|fried rice)$|^(chicken|pork) chilly \((dry|dried|gravy)\)$/i;
 export function validateInventoryStaging(items: StagedInventoryItem[], recipes: StagedRecipe[]): StagingReport {
   const issues: string[] = [];
   const ids = new Set<string>();
@@ -60,5 +60,7 @@ export function validateInventoryStaging(items: StagedInventoryItem[], recipes: 
       if (ing.stockDeductionReady && !ing.verified) issues.push(`Unverified ingredient enabled: ${name} / ${ing.ingredient}`);
     }
   }
+  if (items.length !== 144) issues.push(`Expected 144 inventory items, got ${items.length}`);
+  if (recipes.length !== 14) issues.push(`Expected 14 approved recipes, got ${recipes.length}`);
   return { items: items.length, recipes: recipes.length, issues, canActivateDeductions: false };
 }
