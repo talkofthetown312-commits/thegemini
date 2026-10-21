@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sizesForCustomerProduct, visibleCustomerProducts } from './customerCatalogue';
+import { sizesForCustomerProduct, visibleCustomerProducts, validateCustomerProduct } from './customerCatalogue';
 import type { Product } from '../models/pos';
 const product: Product = {
   id: 'customer_dish', name: 'Customer Dish', category: 'Mains', price: 100,
@@ -18,5 +18,16 @@ describe('customer POS catalogue', () => {
   });
   it('keeps empty customer menu empty', () => {
     expect(visibleCustomerProducts([])).toEqual([]);
+  });
+});
+
+describe('customer menu input validation', () => {
+  it('accepts a correctly priced menu item', () => {
+    expect(() => validateCustomerProduct(product)).not.toThrow();
+  });
+  it('rejects invalid price, missing size and duplicate sizes', () => {
+    expect(() => validateCustomerProduct({ ...product, price: -1 })).toThrow();
+    expect(() => validateCustomerProduct({ ...product, sizes: [] })).toThrow();
+    expect(() => validateCustomerProduct({ ...product, sizes: [product.sizes[0], product.sizes[0]] })).toThrow();
   });
 });
