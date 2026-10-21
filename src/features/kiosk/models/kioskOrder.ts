@@ -48,3 +48,22 @@ export function calculateKioskTotalMinor(items: KioskOrderLine[]): number {
 export function canConfirmKioskPayment(order: KioskOrder): boolean {
   return order.status === 'PENDING_PAYMENT' && !order.paidAt && !order.posOrderId;
 }
+
+/**
+ * Pure payment state transition. The eventual SQLite host must enforce this
+ * condition atomically (compare-and-swap) in a database transaction, together
+ * with its unique POS order mapping and stock movement/outbox records.
+ */
+export function markKioskOrderPaid(
+  order: KioskOrder,
+  posOrderId: string,
+  paidAt: string
+): KioskOrder {
+  if (!canConfirmKioskPayment(order)) {
+    throw new Error('Kiosk order is not awaiting payment');
+  }
+  if (!posOrderId.trim() || !Number.isFinite(Date.parse(paidAt))) {
+    throw new Error('Payment confirmation requires a POS order ID and valid timestamp');
+  }
+  return { ...order, status: 'PAID', posOrderId, paidAt };
+}
