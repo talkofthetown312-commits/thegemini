@@ -6,17 +6,19 @@ import { visibleCustomerProducts, sizesForCustomerProduct, validateCustomerProdu
 
 class PosService {
 
-  async getProducts(): Promise<Product[]> {
+  async getAllProducts(): Promise<Product[]> {
     // Firestore is the source of truth for the customer's menu, including
     // newly created products, edited prices and availability.
     if (db) {
       const snapshot = await getDocs(query(collection(db, 'pos_products')));
-      return visibleCustomerProducts(snapshot.docs.map(record =>
-        ({ ...record.data(), id: record.id } as Product)
-      ));
+      return snapshot.docs.map(record => ({ ...record.data(), id: record.id } as Product));
     }
     // Demo-only fallback when no customer database is configured.
-    return visibleCustomerProducts(INITIAL_MENU_ITEMS);
+    return INITIAL_MENU_ITEMS;
+  }
+
+  async getProducts(): Promise<Product[]> {
+    return visibleCustomerProducts(await this.getAllProducts());
   }
 
   async syncInitialMenu(isCollectionEmpty = false): Promise<void> {
