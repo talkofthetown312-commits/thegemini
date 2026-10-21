@@ -339,20 +339,23 @@ export const usePosStore = create<PosState>((set, get) => ({
         status: 'PAID'
       });
 
-      // 1. Inventory Deduction
-      for (const item of cart) {
+      // 1. Inventory Deduction. Paid sale remains recorded even if stock fails.
+      const stockWarnings: string[] = [];
+      for (const [cartIndex, item] of cart.entries()) {
         if (item.recipeId) {
           try {
             const recipes = await manufacturingService.getRecipes();
             const recipe = recipes.find(r => r.id === item.recipeId);
+            if (!recipe) stockWarnings.push(`${item.name}: recipe missing`);
             if (recipe) {
               const baseYield = recipe.yieldQuantity || 1;
               const ratio = item.quantity / baseYield;
               
-              for (const ing of recipe.ingredients) {
+              for (const [ingredientIndex, ing] of recipe.ingredients.entries()) {
                 if (ing.inventoryItemId) {
                   const qtyToDeduct = ing.quantity * ratio;
                   await inventoryService.recordTransaction({
+                    idempotencyKey: `sale_${order.id}_${cartIndex}_${ingredientIndex}`,
                     itemId: ing.inventoryItemId,
                     type: 'STOCK_OUT',
                     quantity: qtyToDeduct,
@@ -361,11 +364,12 @@ export const usePosStore = create<PosState>((set, get) => ({
                     unitCost: ing.costPerUnit || 0,
                     totalCost: (ing.costPerUnit || 0) * qtyToDeduct,
                     performedBy: 'System'
-                  }).catch(e => console.error('Error recording POS inventory deduction', e));
+                  }).catch(e => { console.error('Error recording POS inventory deduction', e); stockWarnings.push(`${item.name}: ${ing.itemName || ing.inventoryItemId}`); });
                 }
               }
             }
           } catch (recipeError) {
+             stockWarnings.push(`${item.name}: recipe lookup failed`);
              console.error('Error fetching recipe for POS deduction', recipeError);
           }
         }
@@ -374,9 +378,9 @@ export const usePosStore = create<PosState>((set, get) => ({
         // If a recipe is missing, flag it for setup rather than writing invalid
         // inventory transactions against the POS product collection.
         if (item.isCombo && item.comboComponents) {
-          const recipes = await manufacturingService.getRecipes().catch(() => []);
+          const recipes = await manufacturingService.getRecipes().catch(() => { stockWarnings.push(`${item.name}: combo recipes unavailable`); return []; });
           const menuProducts = get().products;
-          for (const comp of item.comboComponents) {
+          for (const [componentIndex, comp] of item.comboComponents.entries()) {
             const selected = comp.isChoice && item.selectedOption
               ? comp.options?.find(o => o.name === item.selectedOption)
               : undefined;
@@ -385,6 +389,7 @@ export const usePosStore = create<PosState>((set, get) => ({
             const product = menuProducts.find(p => p.id === productId);
             const recipe = recipes.find(r => r.id === product?.recipeId);
             if (!recipe) {
+              stockWarnings.push(`${item.name}: combo component recipe missing (${productId})`);
               console.warn('Combo component recipe missing; inventory not deducted:', productId);
               continue;
             }
@@ -392,10 +397,11 @@ export const usePosStore = create<PosState>((set, get) => ({
               componentSize === 'Medium' ? 0.60 : 1;
             const units = (comp.quantity || 1) * item.quantity;
             const yieldQty = recipe.yieldQuantity || 1;
-            for (const ingredient of recipe.ingredients) {
+            for (const [ingredientIndex, ingredient] of recipe.ingredients.entries()) {
               if (!ingredient.inventoryItemId) continue;
               const qty = ingredient.quantity * units * portionScale / yieldQty;
               await inventoryService.recordTransaction({
+                idempotencyKey: `combo_${order.id}_${cartIndex}_${componentIndex}_${ingredientIndex}`,
                 itemId: ingredient.inventoryItemId,
                 type: 'STOCK_OUT',
                 quantity: qty,
@@ -404,7 +410,7 @@ export const usePosStore = create<PosState>((set, get) => ({
                 unitCost: ingredient.costPerUnit || 0,
                 totalCost: (ingredient.costPerUnit || 0) * qty,
                 performedBy: 'System'
-              }).catch(e => console.error('Combo ingredient deduction failed:', e));
+              }).catch(e => { console.error('Combo ingredient deduction failed:', e); stockWarnings.push(`${item.name}: ${ingredient.itemName || ingredient.inventoryItemId}`); });
             }
           }
         }
@@ -455,7 +461,7 @@ export const usePosStore = create<PosState>((set, get) => ({
         discount: null,
         loading: false, 
         lastCompletedOrder: order,
-        error: kitchenWarning,
+        error: [kitchenWarning, stockWarnings.length ? `Paid order ${order.orderNumber}: ${stockWarnings.length} inventory issue(s). Review stock movements before closing. ${stockWarnings.join('; ')}` : null].filter(Boolean).join(' | ') || null,
         ordersHistory: updatedHistory
       });
 
