@@ -509,6 +509,7 @@ export function PosPage() {
             </div>
 
             {/* Quick Action Buttons */}
+            <Link to="/menu" className="rounded-xl bg-[#800000] text-white px-3 py-2 text-xs font-bold">Manage Menu</Link>
             <div className="flex items-center gap-1.5 md:gap-2">
               <button
                 type="button"
