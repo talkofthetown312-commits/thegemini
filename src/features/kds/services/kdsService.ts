@@ -1,6 +1,7 @@
-import { collection, query, where, onSnapshot, doc, updateDoc, getDocs, setDoc, deleteDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, updateDoc, getDocs, setDoc, deleteDoc, runTransaction } from 'firebase/firestore';
 import { Ticket, Station, TicketItemStatus, OrderStatus, TicketItem } from '../models/kds';
 import { db } from '../../../core/firebase/firebaseConfig';
+import { transitionTicketItem } from './ticketTransitions';
 
 class KdsService {
   async getStations(): Promise<Station[]> {
@@ -63,18 +64,19 @@ class KdsService {
   async updateItemStatus(ticketId: string, itemId: string, status: TicketItemStatus, items: TicketItem[]): Promise<void> {
     if (!db) throw new Error('Firestore is not configured. Cannot update kitchen item.');
     const ticketRef = doc(db, 'tickets', ticketId);
-    const updatedItems = items.map(item => 
-      item.id === itemId 
-        ? { ...item, status, ...(status === 'READY' ? { completedAt: new Date().toISOString() } : {}) } 
-        : item
-    );
-    
-    // Auto-update ticket status if all items are ready
-    const allReady = updatedItems.every(i => i.status === 'READY');
-    
-    await updateDoc(ticketRef, { 
-      items: updatedItems,
-      ...(allReady ? { status: 'READY', completedAt: new Date().toISOString() } : {})
+    // The items argument is retained for existing callers, but must never be
+    // used to overwrite the latest server state from another kitchen device.
+    await runTransaction(db, async transaction => {
+      const snapshot = await transaction.get(ticketRef);
+      if (!snapshot.exists()) throw new Error('Kitchen ticket no longer exists. Refresh the kitchen screen.');
+      const ticket = snapshot.data() as Ticket;
+      const now = new Date().toISOString();
+      const { items: updatedItems, allReady, reopened } = transitionTicketItem(ticket, itemId, status, now);
+      transaction.update(ticketRef, {
+        items: updatedItems,
+        ...(allReady ? { status: 'READY', completedAt: now } : {}),
+        ...(reopened ? { status: 'PREPARING', completedAt: null } : {})
+      });
     });
   }
 
