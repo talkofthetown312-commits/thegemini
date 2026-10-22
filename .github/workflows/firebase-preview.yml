@@ -1,0 +1,48 @@
+name: TalkOS Isolated Firebase Preview
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      VITE_FIREBASE_API_KEY: ${{ vars.TALKOS_TEST_FIREBASE_API_KEY }}
+      VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.TALKOS_TEST_FIREBASE_AUTH_DOMAIN }}
+      VITE_FIREBASE_PROJECT_ID: ${{ vars.TALKOS_TEST_FIREBASE_PROJECT_ID }}
+      VITE_FIREBASE_DATABASE_ID: ${{ vars.TALKOS_TEST_FIRESTORE_DATABASE_ID }}
+      VITE_FIREBASE_STORAGE_BUCKET: ${{ vars.TALKOS_TEST_FIREBASE_STORAGE_BUCKET }}
+      VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.TALKOS_TEST_FIREBASE_MESSAGING_SENDER_ID }}
+      VITE_FIREBASE_APP_ID: ${{ vars.TALKOS_TEST_FIREBASE_APP_ID }}
+      FIREBASE_TOKEN: ${{ secrets.TALKOS_TEST_FIREBASE_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Refuse production or incomplete test configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          for key in VITE_FIREBASE_API_KEY VITE_FIREBASE_AUTH_DOMAIN VITE_FIREBASE_PROJECT_ID VITE_FIREBASE_DATABASE_ID VITE_FIREBASE_STORAGE_BUCKET VITE_FIREBASE_MESSAGING_SENDER_ID VITE_FIREBASE_APP_ID FIREBASE_TOKEN; do
+            if [ -z "${!key:-}" ]; then echo "::error::Missing isolated test configuration: $key"; exit 1; fi
+          done
+          if [ "$VITE_FIREBASE_PROJECT_ID" = "gen-lang-client-0658820145" ] || [ "$VITE_FIREBASE_DATABASE_ID" = "ai-studio-talkosarchitectu-438c4707-59bb-4b28-aa84-26b8ca15c574" ]; then
+            echo "::error::Refusing to deploy preview linked to the known production project/database"
+            exit 1
+          fi
+          if [[ "$VITE_FIREBASE_PROJECT_ID" != *test* && "$VITE_FIREBASE_PROJECT_ID" != *staging* ]]; then
+            echo "::error::Test project ID must contain test or staging"
+            exit 1
+          fi
+      - run: npm ci --no-audit --no-fund
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build:pwa
+      - name: Deploy to isolated test Hosting preview channel
+        run: npx --yes firebase-tools hosting:channel:deploy talkos-validation --project "$VITE_FIREBASE_PROJECT_ID" --expires 7d --non-interactive
