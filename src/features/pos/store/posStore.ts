@@ -11,6 +11,7 @@ import {
   ParkedOrder 
 } from '../models/pos';
 import { posService } from '../services/posService';
+import { validateCheckout } from '../services/checkoutValidation';
 import { inventoryService } from '../../inventory/services/inventoryService';
 import { manufacturingService } from '../../manufacturing/services/manufacturingService';
 import { kdsService } from '../../kds/services/kdsService';
@@ -315,6 +316,8 @@ export const usePosStore = create<PosState>((set, get) => ({
       const sgst = discountedSubtotal * 0.025;
       const tax = cgst + sgst;
       const total = Math.round((discountedSubtotal + tax) * 100) / 100;
+
+      validateCheckout(cart, method, details, total);
 
       const order = await posService.createOrder({
         items: cart,

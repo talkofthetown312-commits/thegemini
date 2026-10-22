@@ -167,7 +167,7 @@ class InventoryService {
     if (!db) throw new Error("Firestore is not initialized");
     const newTransaction: StockTransaction = {
       ...transactionData,
-      id: `txn_${Date.now()}`,
+      id: doc(collection(db, 'inventory_transactions')).id,
       date: new Date().toISOString()
     };
 
