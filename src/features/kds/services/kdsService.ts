@@ -19,25 +19,7 @@ class KdsService {
   // Real-time listener for tickets
   subscribeToTickets(stationId: string | null, callback: (tickets: Ticket[]) => void, onError: (error: Error) => void): () => void {
     if (!db) {
-      // Mock data when no DB
-      const mockTickets: Ticket[] = [
-        {
-          id: 't_1',
-          orderId: 'ord_1',
-          orderNumber: 'ORD-10024',
-          tableNumber: 'Table 4',
-          type: 'DINE_IN',
-          status: 'NEW',
-          items: [
-            { id: 'ti_1', productId: 'prod_chow_chicken', productName: 'Chicken Chowmein — Medium', size: 'Medium', quantity: 2, status: 'PENDING', stationId: 'st_1', modifiers: [], notes: 'Extra spicy' },
-            { id: 'ti_2', productId: 'prod_fr_chicken', productName: 'Chicken Fried Rice — Small', size: 'Small', quantity: 1, status: 'PENDING', stationId: 'st_2', modifiers: [] }
-          ],
-          createdAt: new Date().toISOString(),
-          targetTime: new Date(Date.now() + 30 * 60000).toISOString(),
-          priority: 'NORMAL'
-        }
-      ];
-      callback(mockTickets);
+      onError(new Error('Firestore is not configured. Kitchen tickets cannot be loaded.'));
       return () => {};
     }
 
@@ -69,29 +51,17 @@ class KdsService {
   }
 
   async updateTicketStatus(ticketId: string, status: OrderStatus): Promise<void> {
-    // 1. Authoritative update to backend API
-    fetch(`/api/kds/tickets/${ticketId}/status`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status })
-    }).catch(() => {});
-
-    // 2. Client-side Firestore update if active
-    if (!db) return;
-    try {
-      const ticketRef = doc(db, 'tickets', ticketId);
-      await updateDoc(ticketRef, { 
-        status,
-        ...(status === 'ACCEPTED' ? { acceptedAt: new Date().toISOString() } : {}),
-        ...(status === 'READY' ? { completedAt: new Date().toISOString() } : {})
-      });
-    } catch (e) {
-      console.warn("Firestore client update skipped:", e);
-    }
+    if (!db) throw new Error('Firestore is not configured. Cannot update kitchen ticket.');
+    const ticketRef = doc(db, 'tickets', ticketId);
+    await updateDoc(ticketRef, {
+      status,
+      ...(status === 'ACCEPTED' ? { acceptedAt: new Date().toISOString() } : {}),
+      ...(status === 'READY' ? { completedAt: new Date().toISOString() } : {})
+    });
   }
 
   async updateItemStatus(ticketId: string, itemId: string, status: TicketItemStatus, items: TicketItem[]): Promise<void> {
-    if (!db) return;
+    if (!db) throw new Error('Firestore is not configured. Cannot update kitchen item.');
     const ticketRef = doc(db, 'tickets', ticketId);
     const updatedItems = items.map(item => 
       item.id === itemId 

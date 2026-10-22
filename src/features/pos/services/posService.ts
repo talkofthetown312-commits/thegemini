@@ -1,51 +1,34 @@
-import { collection, query, getDocs, doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, query, getDocs, doc, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
 import { db, auth } from '../../../core/firebase/firebaseConfig';
 import { Product, Order, MenuItemSize } from '../models/pos';
 import { INITIAL_MENU_ITEMS, getAllMenuItemSizes } from '../data/menuData';
+import { visibleCustomerProducts, sizesForCustomerProduct, validateCustomerProduct } from './customerCatalogue';
 
 class PosService {
 
+  async getAllProducts(): Promise<Product[]> {
+    // Firestore is the source of truth for the customer's menu, including
+    // newly created products, edited prices and availability.
+    if (db) {
+      const snapshot = await getDocs(query(collection(db, 'pos_products')));
+      return snapshot.docs.map(record => ({ ...record.data(), id: record.id } as Product));
+    }
+    // Demo-only fallback when no customer database is configured.
+    return INITIAL_MENU_ITEMS;
+  }
+
   async getProducts(): Promise<Product[]> {
-    // The approved code menu is the current POS release catalog. Keep availability
-    // flags from Firestore, but do not silently overwrite prices on every page load.
-    // A separate controlled migration must persist approved prices/recipes to Firestore.
-    const released = INITIAL_MENU_ITEMS.filter(p =>
-      p.active !== false && p.isAvailable !== false && !p.isSubItem
-    );
-    let remote: Product[] = [];
-    try {
-      const res = await fetch('/api/products');
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data?.products)) remote = data.products;
-      }
-    } catch {
-      // Static Firebase Hosting has no Express API.
-    }
-    if (remote.length === 0 && db) {
-      try {
-        const snapshot = await getDocs(query(collection(db, 'pos_products')));
-        remote = snapshot.docs.map(record => ({ ...record.data(), id: record.id } as Product));
-      } catch (error) {
-        console.warn('Firestore menu unavailable; using released menu:', error);
-      }
-    }
-    const byId = new Map(remote.map(p => [p.id, p]));
-    return released.filter(p => {
-      const saved = byId.get(p.id);
-      return saved?.isAvailable !== false;
-    }).map(p => ({
-      ...p,
-      // Preserve a Firestore-linked recipe where one exists; do not invent links.
-      recipeId: byId.get(p.id)?.recipeId || p.recipeId
-    }));
+    return visibleCustomerProducts(await this.getAllProducts());
   }
 
   async syncInitialMenu(isCollectionEmpty = false): Promise<void> {
     // Never attempt Firestore write if no db or if user is unauthenticated (prevents 403)
-    if (!db || !auth.currentUser) return;
+    if (!db || !auth.currentUser || !isCollectionEmpty) return;
 
     try {
+      // Seed only a genuinely empty customer menu; never overwrite configured products.
+      const existing = await getDocs(query(collection(db, 'pos_products')));
+      if (!existing.empty) return;
       // Upsert products to pos_products
       for (const item of INITIAL_MENU_ITEMS) {
         await setDoc(doc(db, 'pos_products', item.id), item, { merge: true });
@@ -63,34 +46,51 @@ class PosService {
   }
 
   async getMenuItemSizes(itemId?: string): Promise<MenuItemSize[]> {
-    // Keep the size/price selector aligned with the released POS catalog.
-    // Older Firestore size rows may contain superseded prices; mixing the two
-    // sources could bill a different amount than the displayed menu.
-    const released = getAllMenuItemSizes();
-    return itemId ? released.filter(size => size.item_id === itemId) : released;
+    if (db) {
+      const snapshot = await getDocs(query(collection(db, 'pos_products')));
+      const products = snapshot.docs.map(record => ({ ...record.data(), id: record.id } as Product));
+      const sizes = products.flatMap(sizesForCustomerProduct);
+      return itemId ? sizes.filter(size => size.item_id === itemId) : sizes;
+    }
+    const demoSizes = getAllMenuItemSizes();
+    return itemId ? demoSizes.filter(size => size.item_id === itemId) : demoSizes;
   }
 
   async addProduct(productData: Omit<Product, 'id'>): Promise<Product> {
+    if (!db || !auth.currentUser) throw new Error('Sign in to save a customer menu item.');
+    validateCustomerProduct({ ...productData, id: 'new' });
+    const id = doc(collection(db, 'pos_products')).id;
     const newProduct: Product = {
       ...productData,
-      id: `prod_${Date.now()}`
+      id,
+      sizes: productData.sizes.map(size => ({ ...size, item_id: id }))
     };
-
-    if (db) {
-      await setDoc(doc(db, 'pos_products', newProduct.id), newProduct);
-      if (newProduct.sizes) {
-        for (const s of newProduct.sizes) {
-          const sizeDocId = `${newProduct.id}_${s.size.toLowerCase()}`;
-          await setDoc(doc(db, 'menu_item_sizes', sizeDocId), {
-            ...s,
-            id: sizeDocId,
-            item_id: newProduct.id
-          });
-        }
-      }
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'pos_products', id), newProduct);
+    for (const size of newProduct.sizes) {
+      const sizeId = id + '_' + size.size.toLowerCase();
+      batch.set(doc(db, 'menu_item_sizes', sizeId), { ...size, id: sizeId });
     }
-
+    await batch.commit();
     return newProduct;
+  }
+
+  async updateProduct(product: Product): Promise<void> {
+    if (!db || !auth.currentUser) throw new Error('Sign in to edit menu items.');
+    validateCustomerProduct(product);
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'pos_products', product.id), product);
+    for (const size of product.sizes) {
+      const id = product.id + '_' + size.size.toLowerCase();
+      batch.set(doc(db, 'menu_item_sizes', id), { ...size, id, item_id: product.id });
+    }
+    await batch.commit();
+  }
+
+  async setProductAvailability(productId: string, available: boolean): Promise<void> {
+    if (!db || !auth.currentUser) throw new Error('Sign in to change menu availability.');
+    if (!productId.trim()) throw new Error('Missing product ID.');
+    await updateDoc(doc(db, 'pos_products', productId), { isAvailable: available });
   }
 
   async getOrders(): Promise<Order[]> {

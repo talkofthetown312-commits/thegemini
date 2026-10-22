@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { usePosStore } from '../store/posStore';
 import { Product, ItemSize, Order } from '../models/pos';
 import { 
@@ -75,6 +76,7 @@ export function PosPage() {
   } = usePosStore();
 
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
+  // Customer menu editor is available at /menu.
   const [modalProduct, setModalProduct] = useState<Product | null>(null);
 
   // Billing & History Modals
@@ -119,7 +121,7 @@ export function PosPage() {
     p => p.active !== false && p.isAvailable !== false && !p.isSubItem
   );
 
-  const categories = ['All', 'Chowmein', 'Fried Rice', 'Specials', 'Combo Meals'];
+  const categories = ['All', ...Array.from(new Set(activeProducts.map(p => p.category)))];
 
   const filteredProducts = activeProducts.filter(p => {
     if (selectedCategory === 'All') return true;
@@ -507,6 +509,7 @@ export function PosPage() {
             </div>
 
             {/* Quick Action Buttons */}
+            <Link to="/menu" className="rounded-xl bg-[#800000] text-white px-3 py-2 text-xs font-bold">Manage Menu</Link>
             <div className="flex items-center gap-1.5 md:gap-2">
               <button
                 type="button"
