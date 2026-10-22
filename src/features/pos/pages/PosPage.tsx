@@ -603,6 +603,15 @@ export function PosPage() {
           </div>
         )}
 
+        {/* An empty customer menu is not a loading failure. Show a setup path. */}
+        {!loading && !error && activeProducts.length === 0 && (
+          <div role="status" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+            <p className="font-bold">No active menu items available for sale.</p>
+            <p className="mt-1">Add your first item or enable an existing item in Manage Menu. No sample menu will be imported automatically.</p>
+            <Link to="/menu" className="mt-2 inline-block font-bold underline">Open Manage Menu</Link>
+          </div>
+        )}
+
         {/* Catalog Grid */}
         {loading && activeProducts.length === 0 ? (
           <div className="flex-1 flex items-center justify-center">
