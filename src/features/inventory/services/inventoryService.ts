@@ -163,17 +163,31 @@ class InventoryService {
   }
 
   // --- Transactions ---
-  async recordTransaction(transactionData: Omit<StockTransaction, 'id' | 'date'>): Promise<StockTransaction> {
+  async recordTransaction(transactionData: Omit<StockTransaction, 'id' | 'date'> & { idempotencyKey?: string }): Promise<StockTransaction> {
     if (!db) throw new Error("Firestore is not initialized");
+    const { idempotencyKey, ...stockData } = transactionData;
+    if (idempotencyKey && !/^[A-Za-z0-9_-]{1,180}$/.test(idempotencyKey)) throw new Error('Invalid stock transaction idempotency key');
+    if (!Number.isFinite(stockData.quantity) || stockData.quantity <= 0) throw new Error('Stock quantity must be positive');
     const newTransaction: StockTransaction = {
-      ...transactionData,
-      id: `txn_${Date.now()}`,
+      ...stockData,
+      id: idempotencyKey ? `txn_${idempotencyKey}` : `txn_${crypto.randomUUID()}`,
       date: new Date().toISOString()
     };
 
     await runTransaction(db, async (transaction) => {
-      if (!db) return;
-      
+      const txnRef = doc(db, 'inventory_transactions', newTransaction.id);
+      const existingTxn = await transaction.get(txnRef);
+      if (existingTxn.exists()) {
+        const previous = existingTxn.data() as StockTransaction;
+        if (previous.itemId !== newTransaction.itemId ||
+            previous.type !== newTransaction.type ||
+            previous.quantity !== newTransaction.quantity ||
+            previous.referenceId !== newTransaction.referenceId) {
+          throw new Error('Stock idempotency key reused with different transaction data');
+        }
+        return;
+      }
+
       const itemRef = doc(db, 'inventory_items', newTransaction.itemId);
       const itemDoc = await transaction.get(itemRef);
       
@@ -219,27 +233,29 @@ class InventoryService {
         }
       }
 
-      transaction.update(itemRef, { 
+      // Read all documents before performing any writes (Firestore requirement).
+      let batchRef;
+      let batchDoc;
+      // Update batch if applicable
+      if (newTransaction.batchId) {
+        batchRef = doc(db, 'inventory_batches', newTransaction.batchId);
+        batchDoc = await transaction.get(batchRef);
+      }
+
+      transaction.update(itemRef, {
         currentStock: newStock,
         costPrice: newCostPrice,
         lastUpdated: new Date().toISOString()
       });
-
-      // Update batch if applicable
-      if (newTransaction.batchId) {
-        const batchRef = doc(db, 'inventory_batches', newTransaction.batchId);
-        const batchDoc = await transaction.get(batchRef);
-        if (batchDoc.exists()) {
-           const batchData = batchDoc.data() as ItemBatch;
-           const newBatchStock = batchData.currentQuantity + stockChange;
-           transaction.update(batchRef, {
-              currentQuantity: Math.max(0, newBatchStock),
-              status: newBatchStock <= 0 ? 'DEPLETED' : batchData.status
-           });
-        }
+      if (batchRef && batchDoc?.exists()) {
+        const batchData = batchDoc.data() as ItemBatch;
+        const newBatchStock = batchData.currentQuantity + stockChange;
+        transaction.update(batchRef, {
+          currentQuantity: Math.max(0, newBatchStock),
+          status: newBatchStock <= 0 ? 'DEPLETED' : batchData.status
+        });
       }
 
-      const txnRef = doc(db, 'inventory_transactions', newTransaction.id);
       transaction.set(txnRef, newTransaction);
     });
 
