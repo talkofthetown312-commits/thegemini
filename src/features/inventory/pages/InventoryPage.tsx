@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from 'react';
+import { importMasterInventory } from '../services/importInventoryStaging';
+import { MASTER_INVENTORY } from '../data/masterInventory';
 import { useInventoryStore } from '../store/inventoryStore';
 import { Loader2, Plus, Edit2, Trash2, Search, ArrowRightLeft, Package, FolderTree, Building2, AlertTriangle, LayoutDashboard, MapPin, Archive, RefreshCw, Activity } from 'lucide-react';
 import { InventoryDashboard } from '../components/InventoryDashboard';
@@ -16,7 +18,22 @@ import { InventoryReports } from '../components/InventoryReports';
 type TabType = 'DASHBOARD' | 'ITEMS' | 'CATEGORIES' | 'WAREHOUSES' | 'LOCATIONS' | 'BATCHES' | 'TRANSACTIONS' | 'CYCLE_COUNTS' | 'REPORTS';
 
 export function InventoryPage() {
-  const { loadInitialData, loading, error } = useInventoryStore();
+  const { loadInitialData, loading, error, items } = useInventoryStore();
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState('');
+  const importCatalogue = async () => {
+    if (!window.confirm('Import 144 inventory items at zero stock? Existing records will be skipped.')) return;
+    setImporting(true);
+    setImportResult('');
+    try {
+      const result = await importMasterInventory(true);
+      await loadInitialData();
+      setImportResult('Imported ' + result.imported + ' items; skipped ' + result.skipped);
+      setActiveTab('ITEMS');
+    } catch (err) {
+      setImportResult('Import failed: ' + (err instanceof Error ? err.message : String(err)));
+    } finally { setImporting(false); }
+  };
   const [activeTab, setActiveTab] = useState<TabType>('DASHBOARD');
   
   useEffect(() => {
@@ -62,6 +79,11 @@ export function InventoryPage() {
           <p className="text-slate-500 dark:text-slate-400">Comprehensive stock, valuation, and location tracking</p>
         </div>
         
+        <div className="mb-4 flex flex-wrap items-center gap-3">
+          <span className="text-sm text-slate-500">Master catalogue: {MASTER_INVENTORY.length} · Loaded: {items.length}</span>
+          <button type="button" disabled={importing} onClick={importCatalogue} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{importing ? 'Importing...' : 'Import 144 master items'}</button>
+          {importResult && <span role="status" className="text-sm text-slate-600">{importResult}</span>}
+        </div>
         <div className="flex space-x-1 overflow-x-auto pb-px">
           {tabs.map(tab => (
             <button
