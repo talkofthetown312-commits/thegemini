@@ -4,6 +4,10 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/talkos-android-recovery.yml'
+      - 'src/**'
+      - 'ci/**'
+      - 'index.html'
+      - 'vite.config.ts'
   workflow_dispatch:
 permissions:
   contents: read
@@ -65,7 +69,7 @@ jobs:
           ./node_modules/.bin/cap add android
           ./node_modules/.bin/cap sync android
           ./node_modules/.bin/capacitor-assets generate --android --iconBackgroundColor '#000000' --iconBackgroundColorDark '#000000' --splashBackgroundColor '#000000' --splashBackgroundColorDark '#000000'
-          sed -i -E "s/versionCode [0-9]+/versionCode 500000/" android/app/build.gradle
+          sed -i -E "s/versionCode [0-9]+/versionCode $((500000 + GITHUB_RUN_NUMBER))/" android/app/build.gradle
           grep -q "applicationId 'com.talkofthetown.pos'" android/app/build.gradle || grep 'applicationId' android/app/build.gradle
           cd android
           ./gradlew assembleRelease --no-daemon
