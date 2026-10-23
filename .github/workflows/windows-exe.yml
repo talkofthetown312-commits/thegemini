@@ -6,6 +6,9 @@ on:
     paths:
       - '.github/workflows/windows-exe.yml'
       - 'assets/icon.png'
+      - 'src/**'
+      - 'public/**'
+      - 'index.html'
 permissions:
   contents: read
 jobs:
