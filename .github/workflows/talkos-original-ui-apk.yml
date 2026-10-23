@@ -45,6 +45,16 @@ jobs:
         env:
           VITE_TALKOS_ORIGINAL_OFFLINE: '0'
       - run: npm run build:pwa
+      - name: Verify original POS / inventory / menu on local browser
+        run: node ci/test-original-recovery.mjs
+      - name: Preserve original UI evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TalkOS-Original-UI-Evidence
+          path: recovery-evidence/
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Retire legacy service worker
         run: cp ci/android-sw-retire.js dist/sw.js
       - name: Install isolated Capacitor build tools
