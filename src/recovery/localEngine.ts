@@ -1,6 +1,7 @@
 import localforage from 'localforage';
 import { INITIAL_MENU_ITEMS } from '../features/pos/data/menuData';
 import { MASTER_INVENTORY } from '../features/inventory/data/masterInventory';
+import { REOPENING_PRICE_VARIANTS } from './approvedReopeningPrices';
 import type { Product, ItemSize, OrderType } from '../features/pos/models/pos';
 import type { StagedInventoryItem } from '../features/inventory/services/inventoryStaging';
 
@@ -61,7 +62,14 @@ function initialLedger(): FreshLedger {
   return {
     schema: 1, deviceId: freshId(), initializedAt: dateNow(), nextOrder: 1,
     staff: [],
-    menu: structuredClone(INITIAL_MENU_ITEMS),
+    menu: structuredClone(INITIAL_MENU_ITEMS).map(product => {
+      const reference = REOPENING_PRICE_VARIANTS[product.id];
+      if (!reference) return product;
+      return { ...product,
+        price: reference.Small,
+        sizes: product.sizes.map(size => ({...size, price: reference[size.size as keyof typeof reference]}))
+      };
+    }),
     inventory: structuredClone(MASTER_INVENTORY).map(item => ({
       ...item, currentStock: 0, stockVerified: false, active: false, activationReviewRequired: true
     })),
