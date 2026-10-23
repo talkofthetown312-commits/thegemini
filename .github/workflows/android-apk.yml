@@ -75,6 +75,7 @@ jobs:
         run: |
           npx playwright install --with-deps chromium
           npm run test:mobile-ui
+          node ci/test-android-cache-migration.mjs
       - name: Preserve responsive UI test evidence
         if: always() && matrix.build == 'candidate'
         uses: actions/upload-artifact@v4
@@ -84,6 +85,8 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
       - run: npm run build:pwa
+      - name: Retire web caches left by older Android APKs
+        run: cp ci/android-sw-retire.js dist/sw.js
       - name: Install Capacitor in isolated tooling directory
         shell: bash
         run: |

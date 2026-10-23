@@ -28,6 +28,10 @@ for mode in ('threebutton', 'gestural'):
     xml = adb('shell', 'cat', '/sdcard/talkos-insets.xml')
     (output / f'insets-{mode}.xml').write_text(xml)
     root = ET.fromstring(xml)
+    assert any('View saved inventory' in node.get('text', '')
+               or 'View saved inventory' in node.get('content-desc', '')
+               for node in root.iter('node')), (
+        f'Updated Android UI missing in {mode}; an old web cache may still be active')
     # Chromium's accessibility provider omits the native resource-id once the
     # HTML tree is exposed. The outermost app-owned WebView is still identified
     # by its class; XML preorder selects it before the virtual HTML WebView.

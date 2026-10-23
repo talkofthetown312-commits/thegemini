@@ -14,6 +14,11 @@ adb shell getprop ro.build.version.release
 adb shell getprop ro.build.version.sdk
 if [ -n "$previous" ] && [ -f "$previous" ]; then
   adb install --no-streaming "$previous"
+  # Exercise a real used installation, including the old PWA worker/cache.
+  # Installing an APK without opening it does not cover stale WebView updates.
+  adb shell am start -W -n "$package/.MainActivity"
+  sleep 20
+  adb shell am force-stop "$package"
   adb shell run-as "$package" mkdir -p files
   printf 'TalkOS-previous-install-survives' | adb shell "run-as $package sh -c 'cat > files/previous-upgrade-check'"
   adb install --no-streaming -r "$baseline"

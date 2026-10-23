@@ -119,7 +119,9 @@
         }
         if ('caches' in window) {
           caches.keys().then(function (keys) {
-            return Promise.all(keys.map(function (key) { return caches.delete(key); }));
+            return Promise.all(keys.filter(function (key) {
+              return key.indexOf('workbox-precache-') === 0;
+            }).map(function (key) { return caches.delete(key); }));
           }).catch(function () {});
         }
       })();
