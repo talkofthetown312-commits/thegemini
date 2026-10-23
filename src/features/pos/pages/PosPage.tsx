@@ -207,8 +207,8 @@ export function PosPage() {
   }
 
   const taxableAmount = Math.max(0, subtotal - discountAmount);
-  const cgst = taxableAmount * 0.025; // 2.5%
-  const sgst = taxableAmount * 0.025; // 2.5%
+  const cgst = import.meta.env.VITE_TALKOS_ORIGINAL_OFFLINE === '1' ? 0 : taxableAmount * 0.025; // Tax needs owner confirmation before offline use
+  const sgst = import.meta.env.VITE_TALKOS_ORIGINAL_OFFLINE === '1' ? 0 : taxableAmount * 0.025;
   const tax = cgst + sgst; // 5% total GST
   const grandTotal = Math.round((taxableAmount + tax) * 100) / 100;
 
