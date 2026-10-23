@@ -12,7 +12,7 @@ const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#3b82f6'
 export function ReportsDashboard() {
   const { metrics, salesTrend, expenseBreakdown } = useReportsStore();
 
-  if (!metrics) return null;
+  if (!metrics) return <div className="rounded-xl border border-[#ebd5da] bg-white p-6 text-[#800000]">No verified financial metrics have been recorded for this restaurant. Reports will appear once actual data is available.</div>;
 
   return (
     <div className="space-y-6">
