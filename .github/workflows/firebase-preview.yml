@@ -2,6 +2,18 @@ name: TalkOS Isolated Firebase Preview
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'index.html'
+      - 'firebase.json'
+      - '.github/workflows/firebase-preview.yml'
+
+concurrency:
+  group: talkos-staging-hosting
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -50,5 +62,7 @@ jobs:
           workload_identity_provider: projects/93376253053/locations/global/workloadIdentityPools/github-pool/providers/github-provider
           service_account: talkos-github-deployer@talkos-staging-default.iam.gserviceaccount.com
           project_id: talkos-staging-default
-      - name: Deploy to isolated staging Hosting preview channel
+      - name: Deploy permanent staging URL (never production)
+        run: npx --yes firebase-tools deploy --only hosting --project talkos-staging-default --non-interactive
+      - name: Deploy to isolated staging preview channel
         run: npx --yes firebase-tools hosting:channel:deploy talkos-validation --project talkos-staging-default --expires 7d --non-interactive
