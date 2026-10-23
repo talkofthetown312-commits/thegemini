@@ -30,7 +30,14 @@ if grep -q "Process: $package" "$report_dir/crashes.txt"; then
 fi
 adb exec-out screencap -p > "$report_dir/launch.png"
 adb logcat -d -s Capacitor Capacitor/Console chromium > "$report_dir/webview.txt"
-adb shell uiautomator dump /sdcard/talkos-window.xml
-adb pull /sdcard/talkos-window.xml "$report_dir/window.xml"
+# UI hierarchy capture is auxiliary evidence. On Android 16 this may
+# exhaust the hosted runner after installation and upgrade have already passed.
+# Never discard successful install/upgrade results because of this optional step.
+if timeout 20s adb shell uiautomator dump /sdcard/talkos-window.xml; then
+  timeout 15s adb pull /sdcard/talkos-window.xml "$report_dir/window.xml" ||
+    echo 'Optional UI XML capture unavailable; install/upgrade evidence is intact.'
+else
+  echo 'Optional UI hierarchy capture unavailable; install/upgrade evidence is intact.'
+fi
 echo 'PASS: fresh installation, in-place upgrade, private data preservation, and launch on Android emulator.'
 echo 'Physical-device installation: NOT TESTED. Account login: NOT TESTED (no credentials used).'
