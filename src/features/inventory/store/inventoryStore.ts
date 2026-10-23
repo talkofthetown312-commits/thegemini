@@ -11,6 +11,7 @@ interface InventoryState {
   storageLocations: StorageLocation[];
   loading: boolean;
   error: string | null;
+  itemsLoaded: boolean;
   loadInitialData: () => Promise<void>;
   addCategory: (category: Omit<Category, 'id' | 'createdAt'>) => Promise<void>;
   addWarehouse: (warehouse: Omit<Warehouse, 'id'>) => Promise<void>;
@@ -34,22 +35,42 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
   storageLocations: [],
   loading: false,
   error: null,
+  itemsLoaded: false,
   
   loadInitialData: async () => {
-    set({ loading: true, error: null });
-    try {
-      const [items, categories, warehouses, batches, cycleCounts, storageLocations] = await Promise.all([
-        inventoryService.getItems(),
-        inventoryService.getCategories(),
-        inventoryService.getWarehouses(),
-        inventoryService.getBatches(),
-        inventoryService.getCycleCounts(),
-        inventoryService.getStorageLocations()
-      ]);
-      set({ items, categories, warehouses, batches, cycleCounts, storageLocations, loading: false });
-    } catch (err: any) {
-      set({ error: err.message, loading: false });
-    }
+    set({ loading: true, error: null, itemsLoaded: false });
+    // Load each collection independently: a missing warehouse, category or
+    // manager-only resource must not hide inventory items that were retrieved.
+    const sources = [
+      inventoryService.getItems(),
+      inventoryService.getCategories(),
+      inventoryService.getWarehouses(),
+      inventoryService.getBatches(),
+      inventoryService.getCycleCounts(),
+      inventoryService.getStorageLocations()
+    ] as const;
+    const results = await Promise.allSettled(sources);
+    const failedNames = ['inventory items', 'categories', 'warehouses', 'batches', 'cycle counts', 'storage locations'];
+    const errors = results.flatMap((result, index) =>
+      result.status === 'rejected'
+        ? [failedNames[index] + ': ' + (result.reason instanceof Error ? result.reason.message : String(result.reason))]
+        : []
+    );
+    const valueOrEmpty = <T,>(index: number): T[] => {
+      const result = results[index];
+      return result.status === 'fulfilled' ? result.value as T[] : [];
+    };
+    set({
+      items: valueOrEmpty<InventoryItem>(0),
+      categories: valueOrEmpty<Category>(1),
+      warehouses: valueOrEmpty<Warehouse>(2),
+      batches: valueOrEmpty<ItemBatch>(3),
+      cycleCounts: valueOrEmpty<CycleCount>(4),
+      storageLocations: valueOrEmpty<StorageLocation>(5),
+      itemsLoaded: results[0].status === 'fulfilled',
+      error: errors.length ? 'Could not load ' + errors.join('; ') : null,
+      loading: false
+    });
   },
 
   addCategory: async (category) => {
