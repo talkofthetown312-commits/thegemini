@@ -28,7 +28,13 @@ for mode in ('threebutton', 'gestural'):
     xml = adb('shell', 'cat', '/sdcard/talkos-insets.xml')
     (output / f'insets-{mode}.xml').write_text(xml)
     root = ET.fromstring(xml)
-    webview = next(node for node in root.iter('node') if node.get('resource-id') == package + ':id/webview')
+    # Chromium's accessibility provider omits the native resource-id once the
+    # HTML tree is exposed. The outermost app-owned WebView is still identified
+    # by its class; XML preorder selects it before the virtual HTML WebView.
+    webview = next((node for node in root.iter('node')
+                    if node.get('class') == 'android.webkit.WebView'
+                    and node.get('package') == package), None)
+    assert webview is not None, f'App WebView missing in {mode}; inspect insets-{mode}.xml'
     bounds = [int(value) for value in re.findall(r'\d+', webview.get('bounds'))]
     sizes = re.findall(r'(\d+)x(\d+)', adb('shell', 'wm', 'size'))
     width, height = map(int, sizes[-1])
