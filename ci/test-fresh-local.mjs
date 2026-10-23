@@ -19,7 +19,7 @@ async function waitForServer() {
   }
   throw new Error('Vite preview did not start: ' + output.slice(-1500));
 }
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROME_BIN || '/usr/bin/google-chrome' });
 const context = await browser.newContext({
   viewport: { width: 390, height: 844 }, hasTouch: true,
   deviceScaleFactor: 1
