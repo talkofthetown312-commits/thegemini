@@ -48,8 +48,8 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build:pwa
-      - name: Install Chromium for native-layout functional tests
-        run: npx playwright install --with-deps chromium
+      - name: Select preinstalled Chrome for functional tests
+        run: command -v google-chrome
       - name: Exercise offline POS and PIN flows in Chromium
         run: node ci/test-fresh-local.mjs
       - name: Keep tested screen captures
