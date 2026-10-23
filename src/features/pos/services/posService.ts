@@ -13,8 +13,7 @@ class PosService {
       const snapshot = await getDocs(query(collection(db, 'pos_products')));
       return snapshot.docs.map(record => ({ ...record.data(), id: record.id } as Product));
     }
-    // Demo-only fallback when no customer database is configured.
-    return INITIAL_MENU_ITEMS;
+    throw new Error('Restaurant menu unavailable: database is not configured.');
   }
 
   async getProducts(): Promise<Product[]> {
@@ -52,8 +51,7 @@ class PosService {
       const sizes = products.flatMap(sizesForCustomerProduct);
       return itemId ? sizes.filter(size => size.item_id === itemId) : sizes;
     }
-    const demoSizes = getAllMenuItemSizes();
-    return itemId ? demoSizes.filter(size => size.item_id === itemId) : demoSizes;
+    throw new Error('Restaurant menu sizes unavailable: database is not configured.');
   }
 
   async addProduct(productData: Omit<Product, 'id'>): Promise<Product> {
