@@ -54,6 +54,9 @@ jobs:
           cd /tmp/talkos-capacitor-tools
           npm init -y >/dev/null
           npm install --no-audit --no-fund --save-exact @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 typescript@5 @capacitor/assets@3 sharp@0.34
+          mkdir -p assets
+          cp "$GITHUB_WORKSPACE/assets/icon.png" assets/icon.png
+          node -e "const sharp=require('sharp'),fs=require('fs');sharp('assets/icon.png').resize(1024,1024).toBuffer().then(data=>fs.writeFileSync('assets/icon.png',data)).catch(e=>{console.error(e);process.exit(1)})"
           ln -s "$GITHUB_WORKSPACE"/dist dist
           cp "$GITHUB_WORKSPACE"/capacitor.config.ts ./capacitor.config.ts
           node -e "const fs=require('fs'); const p=require('./package.json'); p.type='module'; fs.writeFileSync('package.json',JSON.stringify(p,null,2))"
