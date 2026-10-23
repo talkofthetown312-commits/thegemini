@@ -39,7 +39,7 @@ jobs:
           Push-Location "$env:RUNNER_TEMP\\talkos-electron-tools"
           npm init -y
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          npm install --no-audit --no-fund --save-exact electron@37 electron-builder@26
+          npm install --no-audit --no-fund --save-dev --save-exact electron@37 electron-builder@26
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Pop-Location
       - name: Build existing TalkOS Electron application
@@ -47,13 +47,21 @@ jobs:
       - name: Package Windows portable EXE
         shell: pwsh
         run: |
-          & "$env:RUNNER_TEMP\\talkos-electron-tools\\node_modules\\.bin\\electron-builder.cmd" --win portable --publish never --config electron-builder.yml
+          $toolsDir = Join-Path $env:RUNNER_TEMP 'talkos-electron-tools'
+          Copy-Item -Recurse -Force "$env:GITHUB_WORKSPACE\\dist" "$toolsDir\\dist"
+          Copy-Item -Recurse -Force "$env:GITHUB_WORKSPACE\\dist-electron" "$toolsDir\\dist-electron"
+          Copy-Item -Force "$env:GITHUB_WORKSPACE\\electron-builder.yml" "$toolsDir\\electron-builder.yml"
+          Push-Location $toolsDir
+          npm pkg set name=talkos version=0.1.0 main=dist-electron/main.cjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & "$toolsDir\\node_modules\\.bin\\electron-builder.cmd" --win portable --publish never --config electron-builder.yml
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Pop-Location
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
       - uses: actions/upload-artifact@v4
         with:
           name: TalkOS-Windows-STAGING-EXE
-          path: release/*.exe
+          path: ${{ runner.temp }}/talkos-electron-tools/release/*.exe
           if-no-files-found: error
           retention-days: 7
