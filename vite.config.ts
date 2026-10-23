@@ -10,7 +10,7 @@ export default defineConfig(() => {
     plugins: [
       react(), 
       tailwindcss(),
-      VitePWA({
+      ...(process.env.TALKOS_NATIVE_ANDROID === '1' ? [] : [VitePWA({
         registerType: 'autoUpdate',
         devOptions: {
           enabled: true,
@@ -51,7 +51,7 @@ export default defineConfig(() => {
             },
           ],
         },
-      }),
+      })]),
     ],
     resolve: {
       alias: {
