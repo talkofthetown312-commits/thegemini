@@ -51,6 +51,11 @@ class AuthService {
 
   async loginWithGoogle(): Promise<User> {
     if (!auth) throw new Error('Firebase not initialized');
+    // Firebase's web popup cannot complete reliably in an embedded native WebView.
+    // Keep the web flow intact; native Google auth requires a configured native provider.
+    if (typeof window !== 'undefined' && (window as any).Capacitor?.isNativePlatform?.()) {
+      throw new Error('Google sign-in is not configured in the Android/iOS APK. Use TalkOS email and password to sign in.');
+    }
     const provider = new GoogleAuthProvider();
     const userCredential = await signInWithPopup(auth, provider);
     
@@ -65,6 +70,9 @@ class AuthService {
 
   async loginWithApple(): Promise<User> {
     if (!auth) throw new Error('Firebase not initialized');
+    if (typeof window !== 'undefined' && (window as any).Capacitor?.isNativePlatform?.()) {
+      throw new Error('Apple sign-in is not configured in the Android/iOS app. Use TalkOS email and password to sign in.');
+    }
     const provider = new OAuthProvider('apple.com');
     const userCredential = await signInWithPopup(auth, provider);
     
