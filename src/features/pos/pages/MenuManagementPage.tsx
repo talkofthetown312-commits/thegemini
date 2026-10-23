@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { Product, ItemSize } from '../models/pos';
 import { posService } from '../services/posService';
+import { BundledMenuReference } from '../components/BundledMenuReference';
 
 const sizes: ItemSize[] = ['Small', 'Medium', 'Large', 'Standard'];
 const blank = (): Product => ({
@@ -24,9 +25,12 @@ export function MenuManagementPage() {
       const items = await posService.getAllProducts();
       setProducts(items);
       setLoaded(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      // Do not mark the database as empty when the read was rejected.
     } finally { setLoading(false); }
   };
-  useEffect(() => { reload().catch(e => setError(String(e))); }, []);
+  useEffect(() => { void reload(); }, []);
   const save = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!editing) return;
@@ -53,13 +57,18 @@ export function MenuManagementPage() {
   return <div className="p-5 space-y-5 text-slate-900 dark:text-white">
     <div className="flex flex-wrap justify-between items-center gap-3">
       <div><h1 className="text-2xl font-bold">Menu Management</h1><p className="text-sm text-slate-500">Manage products, prices and availability for your POS.</p></div>
-      <div className="flex flex-wrap gap-2"><button type="button" disabled={loading} onClick={() => { void reload().catch(e => setError(e instanceof Error ? e.message : String(e))); }} className="rounded-lg border px-4 py-2 disabled:opacity-50">{loading ? 'Loading menu...' : 'Refresh menu'}</button><Link to="/pos" className="rounded-lg border px-4 py-2">Back to POS</Link><button onClick={() => setEditing(blank())} className="rounded-lg bg-indigo-600 px-4 py-2 text-white">Add product</button></div>
+      <div className="flex flex-wrap gap-2"><button type="button" disabled={loading} onClick={() => { void reload(); }} className="rounded-lg border px-4 py-2 disabled:opacity-50">{loading ? 'Loading menu...' : 'Refresh menu'}</button><Link to="/pos" className="rounded-lg border px-4 py-2">Back to POS</Link><button disabled={!loaded || Boolean(error) || busy} onClick={() => setEditing(blank())} className="rounded-lg bg-indigo-600 px-4 py-2 text-white disabled:cursor-not-allowed disabled:opacity-50">Add product</button></div>
     </div>
-    {error && <p role="alert" className="text-red-600">{error}</p>}
+    {error && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-red-800">
+      <p className="font-semibold">The connected menu could not be read. Nothing has been deleted.</p>
+      <p className="mt-1 text-sm">{error}</p>
+      <p className="mt-1 text-sm">Menu editing and checkout are unavailable until the database permissions are fixed. Your bundled menu reference appears below.</p>
+    </div>}
     {notice && <p role="status" className="text-green-600">{notice}</p>}
+    {(Boolean(error) || (loaded && products.length === 0)) && <BundledMenuReference />}
     <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
       <table className="w-full text-sm"><thead className="bg-slate-100 dark:bg-slate-800"><tr><th className="p-3 text-left">Product</th><th className="p-3 text-left">Category</th><th className="p-3 text-left">Prices</th><th className="p-3 text-left">Availability</th><th className="p-3">Actions</th></tr></thead>
-      <tbody>{products.map(p => <tr key={p.id} className="border-t border-slate-200 dark:border-slate-700"><td className="p-3 font-medium">{p.name}</td><td className="p-3">{p.category}</td><td className="p-3">{(p.sizes || []).map(s => s.size + ': ₹' + s.price).join(', ')}</td><td className="p-3">{p.isAvailable ? 'Available' : 'Unavailable'}</td><td className="p-3 text-center"><button className="mr-3 text-indigo-600" onClick={() => setEditing({ ...p, sizes: p.sizes.map(s => ({...s})) })}>Edit</button><button disabled={busy} className="text-amber-700 disabled:opacity-50" onClick={() => availability(p)}>{p.isAvailable ? 'Disable' : 'Enable'}</button></td></tr>)}</tbody></table>
+      <tbody>{products.map(p => <tr key={p.id} className="border-t border-slate-200 dark:border-slate-700"><td className="p-3 font-medium">{p.name}</td><td className="p-3">{p.category}</td><td className="p-3">{(p.sizes || []).map(s => s.size + ': ₹' + s.price).join(', ')}</td><td className="p-3">{p.isAvailable ? 'Available' : 'Unavailable'}</td><td className="p-3 text-center"><button disabled={Boolean(error)} className="mr-3 text-indigo-600 disabled:opacity-50" onClick={() => setEditing({ ...p, sizes: p.sizes.map(s => ({...s})) })}>Edit</button><button disabled={busy || Boolean(error)} className="text-amber-700 disabled:opacity-50" onClick={() => availability(p)}>{p.isAvailable ? 'Disable' : 'Enable'}</button></td></tr>)}</tbody></table>
       {loading && <p role="status" className="p-5 text-slate-500">Loading saved menu items...</p>}
       {!loading && !error && loaded && products.length === 0 && <p role="status" className="p-5 text-slate-500">No saved menu items were returned for this restaurant. Check the restaurant data connection before recreating existing items.</p>}
     </div>
