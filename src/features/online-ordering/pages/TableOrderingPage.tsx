@@ -7,7 +7,6 @@ import {
 } from 'lucide-react';
 import { posService } from '../../pos/services/posService';
 import { Product, OrderItem, MenuItemSize } from '../../pos/models/pos';
-import { INITIAL_MENU_ITEMS } from '../../pos/data/menuData';
 import { OrderStatusTracker } from '../components/OrderStatusTracker';
 
 export function TableOrderingPage() {
@@ -48,14 +47,10 @@ export function TableOrderingPage() {
       try {
         setLoading(true);
         const data = await posService.getProducts();
-        if (data && data.length > 0) {
-          setProducts(data.filter(p => p.active !== false && p.isAvailable !== false && !p.isSubItem));
-        } else {
-          setProducts(INITIAL_MENU_ITEMS.filter(p => p.active !== false && p.isAvailable !== false && !p.isSubItem));
-        }
+        setProducts(data.filter(p => p.active !== false && p.isAvailable !== false && !p.isSubItem));
       } catch (err) {
         console.error('Failed to load menu items:', err);
-        setProducts(INITIAL_MENU_ITEMS.filter(p => p.active !== false && p.isAvailable !== false && !p.isSubItem));
+        setProducts([]);
       } finally {
         setLoading(false);
       }
@@ -181,6 +176,7 @@ export function TableOrderingPage() {
       }
 
       const data = await res.json();
+      if (!data.success || !data.orderId || !data.orderNumber) throw new Error('Order not acknowledged by backend');
       setSubmittedOrder({
         orderId: data.orderId,
         orderNumber: data.orderNumber,
@@ -188,33 +184,9 @@ export function TableOrderingPage() {
       });
       setCart([]);
       setIsCartOpen(false);
-    } catch (err: any) {
-      console.error('Order submission error:', err);
-      // Fallback: create order locally through posService so it is not lost
-      try {
-        const localOrder = await posService.createOrder({
-          orderType: 'DINE_IN',
-          tableNumber,
-          customerName: customerName || `Table ${tableNumber}`,
-          customerPhone,
-          items: cart,
-          subtotal: cartTotal,
-          tax: taxAmount,
-          total: grandTotal,
-          paymentMethod,
-          status: paymentMethod === 'CASH' ? 'PENDING' : 'PAID',
-          orderNotes
-        });
-        setSubmittedOrder({
-          orderId: localOrder.id,
-          orderNumber: localOrder.orderNumber,
-          estimatedMinutes: 18
-        });
-        setCart([]);
-        setIsCartOpen(false);
-      } catch (innerErr) {
-        alert('Could not submit order. Please check connection or notify your server.');
-      }
+    } catch (err) {
+      console.error('Order submission failed:', err);
+      alert('Order was not accepted by the restaurant server. No payment or order has been recorded; please ask counter staff.');
     } finally {
       setIsSubmitting(false);
     }
