@@ -33,7 +33,7 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
   ];
 
   // If no roles are set, default to show all for demo purposes, or filter strictly
-  const userRoles = profile?.roles || ['OWNER']; // Fallback for dev
+  const userRoles = profile?.roles || []; // Never treat a missing staff profile as owner
 
   const filteredNav = navigation.filter(item => 
     item.roles.some(role => userRoles.includes(role))
@@ -112,8 +112,8 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
 
           <div className="bg-[#fdf5f6] border border-[#ebd5da] rounded-xl p-3">
             <h4 className="text-[11px] font-bold text-[#800000]/80 uppercase tracking-wider mb-0.5">Branch</h4>
-            <p className="text-sm font-bold text-[#800000] truncate">Main Downtown</p>
-            <p className="text-xs text-[#800000]/70">Terminal 01</p>
+            <p className="text-sm font-bold text-[#800000] truncate">Talk of the Town · Imphal</p>
+            <p className="text-xs text-[#800000]/70">Terminal not configured</p>
           </div>
         </div>
       </aside>
