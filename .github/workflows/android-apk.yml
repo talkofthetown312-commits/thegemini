@@ -30,6 +30,7 @@ jobs:
       matrix:
         build: [baseline, candidate]
     env:
+      TALKOS_NATIVE_ANDROID: '1'
       VITE_FIREBASE_API_KEY: ${{ vars.TALKOS_TEST_FIREBASE_API_KEY }}
       VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.TALKOS_TEST_FIREBASE_AUTH_DOMAIN }}
       VITE_FIREBASE_PROJECT_ID: ${{ vars.TALKOS_TEST_FIREBASE_PROJECT_ID }}
