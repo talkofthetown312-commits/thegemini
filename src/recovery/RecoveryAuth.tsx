@@ -49,3 +49,6 @@ export function useRecoveryAuth() {
   if (!value) throw new Error('RecoveryAuthProvider is not mounted');
   return value;
 }
+
+/** Called by the shared useAuth hook; returns undefined in cloud mode. */
+export function useRecoveryAuthOptional() { return useContext(Context); }
