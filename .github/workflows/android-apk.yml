@@ -46,10 +46,25 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build:pwa
-      - name: Install Capacitor Android build tooling
-        run: npm install --no-save --package-lock=false @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7
+      - name: Install Capacitor in isolated tooling directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/talkos-capacitor-tools
+          cd /tmp/talkos-capacitor-tools
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund --save-exact @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7
+          ln -s "$GITHUB_WORKSPACE"/dist dist
+          cp "$GITHUB_WORKSPACE"/capacitor.config.ts ./capacitor.config.ts
+          node -e "const fs=require('fs'); const p=require('./package.json'); p.type='module'; fs.writeFileSync('package.json',JSON.stringify(p,null,2))"
       - name: Generate Android project
-        run: npx cap add android
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd /tmp/talkos-capacitor-tools
+          ./node_modules/.bin/cap add android
+          ./node_modules/.bin/cap sync android
+          cp -a android "$GITHUB_WORKSPACE/android"
       - name: Build debug APK
         working-directory: android
         run: bash ./gradlew assembleDebug --no-daemon
