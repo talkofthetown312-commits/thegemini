@@ -44,6 +44,7 @@ try {
   await shown(page.getByText('TOT-001'),'first inventory item');
   await page.screenshot({path:'recovery-evidence/inventory.png'});
   console.log('STEP: verify menu management');
+  await page.getByRole('button',{name:'Open menu'}).click();
   await page.getByRole('link',{name:'Menu',exact:true}).first().click();
   await shown(page.getByText('Menu Management'),'editable menu screen');
   await shown(page.getByText('Veg Chowmein'),'existing products in menu manager');
