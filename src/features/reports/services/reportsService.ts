@@ -3,7 +3,7 @@ import { SalesReport, ExpenseReport, DashboardMetrics } from '../models/reports'
 import { db } from '../../../core/firebase/firebaseConfig';
 
 class ReportsService {
-  async getDashboardMetrics(): Promise<DashboardMetrics> {
+  async getDashboardMetrics(): Promise<DashboardMetrics | null> {
     if (!db) throw new Error("Firestore is not initialized");
     const q = query(collection(db, 'reports_metrics'));
     const snapshot = await getDocs(q);
@@ -11,16 +11,8 @@ class ReportsService {
       const data = snapshot.docs[0].data();
       return { id: snapshot.docs[0].id, ...data } as unknown as DashboardMetrics;
     }
-    return {
-      todaySales: 125000,
-      weeklySales: 850000,
-      monthlySales: 3500000,
-      grossProfit: 2100000,
-      netProfit: 850000,
-      foodCostPercentage: 28.5,
-      labourCostPercentage: 18.2,
-      operatingExpenses: 450000
-    };
+    // No report exists: do not substitute invented financial figures.
+    return null;
   }
 
   async getSalesTrend(): Promise<SalesReport[]> {
