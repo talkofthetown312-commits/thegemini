@@ -43,6 +43,8 @@ export function PosPage() {
     cart, 
     loading, 
     error, 
+    menuError,
+    ordersError,
     lastCompletedOrder,
     orderType,
     tableNumber,
@@ -244,6 +246,7 @@ export function PosPage() {
               <button
                 type="button"
                 onClick={() => setIsMobileCartOpen(false)}
+                aria-label="Close cart"
                 className="p-1 text-[#800000] hover:bg-[#fee8eb] rounded-lg cursor-pointer"
               >
                 <X className="w-5 h-5" />
@@ -492,7 +495,7 @@ export function PosPage() {
   );
 
   return (
-    <div className="flex h-[calc(100vh-4.25rem)] bg-white text-[#800000] relative overflow-hidden">
+    <div className="flex h-full min-h-0 bg-white text-[#800000] relative overflow-hidden">
       {/* Products Catalog Area */}
       <div className="flex-1 p-3 md:p-6 overflow-y-auto flex flex-col min-w-0">
         
@@ -603,8 +606,16 @@ export function PosPage() {
           </div>
         )}
 
+        {menuError && (
+          <div role="alert" className="mb-4 text-[#800000] bg-[#fee8eb] border border-[#ebd5da] p-3 rounded-lg text-sm">
+            <p className="font-bold">{menuError}</p>
+            <button type="button" disabled={loading} onClick={() => { void loadProducts(); }} className="mt-2 font-bold underline disabled:opacity-50">Retry menu</button>
+          </div>
+        )}
+        {ordersError && <p role="alert" className="mb-4 text-sm text-[#800000]">{ordersError}</p>}
+
         {/* An empty customer menu is not a loading failure. Show a setup path. */}
-        {!loading && !error && activeProducts.length === 0 && (
+        {!loading && !menuError && activeProducts.length === 0 && (
           <div role="status" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
             <p className="font-bold">No active menu items available for sale.</p>
             <p className="mt-1">Add your first item or enable an existing item in Manage Menu. No sample menu will be imported automatically.</p>
@@ -620,7 +631,7 @@ export function PosPage() {
         ) : (
           <div className="space-y-6 flex-1 pb-16 lg:pb-0">
             {/* If looking at All, highlight Combo Meals in their own distinct section */}
-            {selectedCategory === 'All' && (
+            {selectedCategory === 'All' && activeProducts.some(p => p.category === 'Combo Meals') && (
               <div className="bg-[#fdf5f6] border-2 border-[#ebd5da] rounded-2xl p-4 md:p-5 shadow-xs">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
@@ -667,7 +678,7 @@ export function PosPage() {
 
             {/* Standard Catalog Grid */}
             <div>
-              {selectedCategory === 'All' && (
+              {selectedCategory === 'All' && activeProducts.length > 0 && (
                 <div className="flex items-center gap-2 mb-3">
                   <UtensilsCrossed className="w-4 h-4 text-[#800000]" />
                   <h2 className="text-xs md:text-sm font-black uppercase tracking-wider text-[#800000]">
@@ -735,7 +746,7 @@ export function PosPage() {
                   );
                 })}
 
-                {filteredProducts.length === 0 && !loading && (
+                {filteredProducts.length === 0 && !loading && !menuError && activeProducts.length > 0 && (
                   <div className="col-span-full text-center text-[#800000]/70 py-12 font-bold">
                     No active items found in this category.
                   </div>
@@ -752,7 +763,7 @@ export function PosPage() {
       </div>
 
       {/* Mobile Floating Cart Summary Bar (shown only on mobile when items in cart) */}
-      <div className="lg:hidden fixed bottom-16 left-0 right-0 p-3 bg-gradient-to-t from-white via-white to-transparent pointer-events-none z-30">
+      <div className="mobile-cart-bar lg:hidden fixed left-0 right-0 p-3 bg-gradient-to-t from-white via-white to-transparent pointer-events-none z-30">
         <button
           type="button"
           onClick={() => setIsMobileCartOpen(true)}
@@ -778,7 +789,7 @@ export function PosPage() {
       {isMobileCartOpen && (
         <div className="lg:hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex flex-col justify-end">
           <div 
-            className="bg-white rounded-t-3xl max-h-[88vh] h-[85vh] flex flex-col overflow-hidden shadow-2xl animate-in slide-in-from-bottom duration-300"
+            className="bg-white rounded-t-3xl max-h-[88dvh] h-[85dvh] flex flex-col overflow-hidden shadow-2xl animate-in slide-in-from-bottom duration-300"
             onClick={(e) => e.stopPropagation()}
           >
             {renderCartContent(true)}
@@ -840,6 +851,7 @@ export function PosPage() {
         <OrderHistoryModal
           orders={ordersHistory}
           loading={ordersLoading}
+          error={ordersError}
           onRefresh={loadOrdersHistory}
           onSelectOrderForPrint={(order, tab) => {
             setOrderForReprint({ order, tab });

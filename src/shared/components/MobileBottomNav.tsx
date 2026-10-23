@@ -23,7 +23,7 @@ export function MobileBottomNav() {
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-[#ebd5da] md:hidden shadow-lg pb-safe">
+    <nav aria-label="Quick navigation" className="relative shrink-0 z-40 bg-white/95 backdrop-blur-md border-t border-[#ebd5da] lg:hidden shadow-lg pb-safe">
       <div className="grid grid-cols-5 h-16 items-center px-1">
         {navItems.map((item) => {
           const Icon = item.icon;

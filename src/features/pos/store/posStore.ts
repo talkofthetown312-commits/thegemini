@@ -21,6 +21,8 @@ interface PosState {
   cart: OrderItem[];
   loading: boolean;
   error: string | null;
+  menuError: string | null;
+  ordersError: string | null;
   lastCompletedOrder: Order | null;
   
   // Active Order Context
@@ -80,6 +82,8 @@ export const usePosStore = create<PosState>((set, get) => ({
   cart: [],
   loading: false,
   error: null,
+  menuError: null,
+  ordersError: null,
   lastCompletedOrder: null,
 
   orderType: 'DINE_IN',
@@ -102,12 +106,14 @@ export const usePosStore = create<PosState>((set, get) => ({
   removeDiscount: () => set({ discount: null }),
 
   loadProducts: async () => {
-    set({ loading: true, error: null });
+    set({ loading: true, menuError: null });
     try {
       const products = await posService.getProducts();
       set({ products, loading: false });
     } catch (err: any) {
-      set({ error: err.message, loading: false });
+      set({ menuError: err.code === 'permission-denied'
+        ? 'Your account is signed in, but access to the restaurant menu was denied. Saved menu items could not be checked.'
+        : 'Could not load the saved menu: ' + err.message, loading: false });
     }
   },
 
@@ -493,12 +499,12 @@ export const usePosStore = create<PosState>((set, get) => ({
   },
 
   loadOrdersHistory: async () => {
-    set({ ordersLoading: true });
+    set({ ordersLoading: true, ordersError: null });
     try {
       const orders = await posService.getOrders();
       set({ ordersHistory: orders, ordersLoading: false });
     } catch (err: any) {
-      set({ ordersLoading: false, error: err.message });
+      set({ ordersLoading: false, ordersError: 'Could not load order history: ' + err.message });
     }
   },
 

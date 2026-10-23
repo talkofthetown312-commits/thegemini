@@ -64,9 +64,9 @@ export function InventoryPage() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-900">
-      <div className="p-6 pb-0 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-        <div className="mb-6">
+    <div className="flex flex-col min-h-full bg-slate-50 dark:bg-slate-900">
+      <div className="p-3 sm:p-6 pb-0 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+        <div className="mb-4">
           <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Enterprise Inventory</h1>
           <p className="text-slate-500 dark:text-slate-400">Comprehensive stock, valuation, and location tracking</p>
         </div>
@@ -101,7 +101,7 @@ export function InventoryPage() {
           <span>Some database sections could not load: {error}. The read-only master catalogue remains available.</span>
         </div>
       )}
-      <div className="flex-1 p-6 overflow-y-auto">
+      <div className="flex-1 min-w-0 p-3 sm:p-6">
         {activeTab === 'MASTER' && <MasterInventoryCatalogue savedIds={savedIds} itemsLoaded={itemsLoaded} />}
         {activeTab === 'DASHBOARD' && <InventoryDashboard />}
         {activeTab === 'ITEMS' && <ItemMaster />}

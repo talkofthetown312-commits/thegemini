@@ -20,6 +20,7 @@ concurrency:
 
 permissions:
   contents: read
+  actions: read
 jobs:
   android-apk:
     runs-on: ubuntu-latest
@@ -68,6 +69,19 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - run: npm run lint
       - run: npm test
+      - name: Check touch navigation and small-screen layout
+        if: matrix.build == 'candidate'
+        run: |
+          npx playwright install --with-deps chromium
+          npm run test:mobile-ui
+      - name: Preserve responsive UI test evidence
+        if: always() && matrix.build == 'candidate'
+        uses: actions/upload-artifact@v4
+        with:
+          name: TalkOS-mobile-ui-${{ github.run_attempt }}
+          path: ui-evidence/
+          if-no-files-found: ignore
+          retention-days: 7
       - run: npm run build:pwa
       - name: Install Capacitor in isolated tooling directory
         shell: bash
@@ -166,6 +180,34 @@ jobs:
         with:
           name: TalkOS-APK-candidate-${{ github.run_attempt }}
           path: candidate
+      - name: Find oldest retained validated APK for compatibility testing
+        id: prior-apk
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const runs = await github.rest.actions.listWorkflowRuns({
+              ...context.repo, workflow_id: 'android-apk.yml', status: 'success', per_page: 100
+            });
+            const older = runs.data.workflow_runs
+              .filter(run => run.run_number < Number(process.env.GITHUB_RUN_NUMBER))
+              .sort((a, b) => a.run_number - b.run_number);
+            for (const run of older) {
+              const artifacts = await github.rest.actions.listWorkflowRunArtifacts({ ...context.repo, run_id: run.id });
+              const artifact = artifacts.data.artifacts.find(a => !a.expired && a.name.startsWith('TalkOS-Android-STAGING-validated-'));
+              if (artifact) {
+                core.setOutput('run-id', String(run.id));
+                core.setOutput('name', artifact.name);
+                core.info(`Testing upgrade from validated run ${run.id}`);
+                break;
+              }
+            }
+      - uses: actions/download-artifact@v4
+        if: steps.prior-apk.outputs.run-id != ''
+        with:
+          name: ${{ steps.prior-apk.outputs.name }}
+          run-id: ${{ steps.prior-apk.outputs.run-id }}
+          github-token: ${{ github.token }}
+          path: previous
       - name: Verify both independently built APKs again
         shell: bash
         run: |
@@ -176,6 +218,11 @@ jobs:
           baseline_version=$((1000 + GITHUB_RUN_NUMBER * 100 + GITHUB_RUN_ATTEMPT * 2))
           python ci/validate-android-apk.py baseline/TalkOS-STAGING.apk --version "$baseline_version" --sdk "$ANDROID_HOME" --report evidence/baseline.json
           python ci/validate-android-apk.py candidate/TalkOS-STAGING.apk --version "$((baseline_version + 1))" --sdk "$ANDROID_HOME" --report evidence/candidate.json
+          if [ -f previous/TalkOS-STAGING.apk ]; then
+            previous_version="$(python -c 'import json; print(json.load(open("previous/candidate.json"))["versionCode"])')"
+            test "$previous_version" -lt "$baseline_version"
+            python ci/validate-android-apk.py previous/TalkOS-STAGING.apk --version "$previous_version" --sdk "$ANDROID_HOME" --report evidence/previous.json
+          fi
       - name: Enable emulator acceleration
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -189,7 +236,7 @@ jobs:
           arch: x86_64
           profile: pixel_7_pro
           disable-animations: true
-          script: bash ci/test-android-upgrade.sh baseline/TalkOS-STAGING.apk candidate/TalkOS-STAGING.apk evidence
+          script: bash ci/test-android-upgrade.sh baseline/TalkOS-STAGING.apk candidate/TalkOS-STAGING.apk evidence previous/TalkOS-STAGING.apk
       - name: Confirm installed version
         shell: bash
         run: |

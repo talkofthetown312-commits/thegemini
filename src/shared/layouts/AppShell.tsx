@@ -12,25 +12,25 @@ export function AppShell() {
   const isFullScreenRoute = location.pathname.startsWith('/kds') || location.pathname.startsWith('/pos');
 
   return (
-    <div className="min-h-screen bg-[#ffffff] text-[#800000] flex font-sans selection:bg-[#800000] selection:text-white">
+    <div className="h-dvh overflow-hidden bg-[#ffffff] text-[#800000] flex font-sans selection:bg-[#800000] selection:text-white">
       {/* Desktop / Drawer Sidebar */}
       <Sidebar isOpen={isMobileMenuOpen} setIsOpen={setIsMobileMenuOpen} />
       
-      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden relative">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden relative">
         {/* PWA In-App Install Prompt Banner */}
         <PwaInstallBanner />
 
         {/* Global Top App Bar */}
-        <TopBar onMenuClick={() => setIsMobileMenuOpen(true)} />
+        <TopBar onMenuClick={() => setIsMobileMenuOpen(open => !open)} isMenuOpen={isMobileMenuOpen} />
         
-        {/* Main Content Viewport with pb-16 padding on mobile for MobileBottomNav */}
-        <main className={`flex-1 overflow-y-auto bg-[#ffffff] pb-18 md:pb-0 ${isFullScreenRoute ? 'p-1 sm:p-2 md:p-4' : 'p-3 lg:p-6'}`}>
-          <div className={`mx-auto h-full ${isFullScreenRoute ? 'max-w-none' : 'max-w-7xl'}`}>
+        {/* Navigation occupies its own row so it cannot cover page controls. */}
+        <main className={`flex-1 min-h-0 min-w-0 overflow-y-auto bg-[#ffffff] ${isFullScreenRoute ? 'p-1 sm:p-2 md:p-4' : 'p-3 lg:p-6'}`}>
+          <div className={`mx-auto h-full min-h-0 ${isFullScreenRoute ? 'max-w-none' : 'max-w-7xl'}`}>
             <Outlet />
           </div>
         </main>
 
-        {/* Fixed Mobile Bottom Navigation Bar (Thumb Zone) */}
+        {/* Mobile Bottom Navigation Bar (Thumb Zone) */}
         <MobileBottomNav />
       </div>
     </div>

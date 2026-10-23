@@ -11,8 +11,24 @@ describe('POS Store and Cart Management', () => {
       cart: [],
       loading: false,
       error: null,
+      menuError: null,
+      ordersError: null,
       lastCompletedOrder: null
     });
+  });
+
+  it('keeps menu access failures separate from an order-history failure', async () => {
+    const menu = vi.spyOn(posService, 'getProducts').mockRejectedValue(Object.assign(new Error('Missing or insufficient permissions.'), { code: 'permission-denied' }));
+    const orders = vi.spyOn(posService, 'getOrders').mockRejectedValue(new Error('Order history denied'));
+    try {
+      await Promise.all([usePosStore.getState().loadProducts(), usePosStore.getState().loadOrdersHistory()]);
+      expect(usePosStore.getState().menuError).toContain('menu was denied');
+      expect(usePosStore.getState().ordersError).toContain('Order history denied');
+      orders.mockResolvedValue([]);
+      await usePosStore.getState().loadOrdersHistory();
+      expect(usePosStore.getState().ordersError).toBeNull();
+      expect(usePosStore.getState().menuError).toContain('menu was denied');
+    } finally { menu.mockRestore(); orders.mockRestore(); }
   });
 
   it('adds items to cart and updates quantities for existing items', () => {

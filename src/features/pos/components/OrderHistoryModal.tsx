@@ -19,6 +19,7 @@ import { Order } from '../models/pos';
 interface OrderHistoryModalProps {
   orders: Order[];
   loading: boolean;
+  error?: string | null;
   onRefresh: () => void;
   onSelectOrderForPrint: (order: Order, defaultTab: 'receipt' | 'kot') => void;
   onCancelOrder: (orderId: string, reason: string) => Promise<void>;
@@ -28,6 +29,7 @@ interface OrderHistoryModalProps {
 export function OrderHistoryModal({
   orders,
   loading,
+  error,
   onRefresh,
   onSelectOrderForPrint,
   onCancelOrder,
@@ -192,7 +194,8 @@ export function OrderHistoryModal({
 
         {/* Orders List Body */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-white">
-          {loading && orders.length === 0 ? (
+          {error && <p role="alert" className="rounded-lg bg-[#fee8eb] p-3 text-sm font-bold">{error}</p>}
+          {error && orders.length === 0 ? null : loading && orders.length === 0 ? (
             <div className="h-48 flex items-center justify-center">
               <Loader2 className="w-8 h-8 animate-spin text-[#800000]" />
             </div>

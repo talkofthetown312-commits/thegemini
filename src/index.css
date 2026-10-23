@@ -75,6 +75,16 @@ body {
   color: #800000;
 }
 
+/* Browsers/PWAs report their own safe area; Android's native WebView margins
+   handle system bars even on WebView versions that report zero CSS insets. */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.mobile-cart-bar {
+  bottom: calc(4rem + env(safe-area-inset-bottom, 0px));
+}
+
 /* Custom scrollbars in solid maroon & white */
 ::-webkit-scrollbar {
   width: 6px;

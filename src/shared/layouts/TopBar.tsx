@@ -18,13 +18,32 @@ import { HardwareSettingsModal } from '../components/HardwareSettingsModal';
 
 interface TopBarProps {
   onMenuClick: () => void;
+  isMenuOpen: boolean;
 }
 
-export function TopBar({ onMenuClick }: TopBarProps) {
+export function TopBar({ onMenuClick, isMenuOpen }: TopBarProps) {
   const { profile, user, logout } = useAuth();
   const isOffline = useAppStore(state => state.isOfflineMode);
   const [isHardwareModalOpen, setIsHardwareModalOpen] = useState(false);
   const [drawerKicked, setDrawerKicked] = useState(false);
+  const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
+  const accountMenu = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!isAccountMenuOpen) return;
+    const closeOutside = (event: PointerEvent) => {
+      if (!accountMenu.current?.contains(event.target as Node)) setIsAccountMenuOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsAccountMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOutside);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [isAccountMenuOpen]);
 
   const [isDark, setIsDark] = React.useState(
     typeof document !== 'undefined' ? document.documentElement.classList.contains('dark') : false
@@ -54,7 +73,10 @@ export function TopBar({ onMenuClick }: TopBarProps) {
           <button
             type="button"
             onClick={onMenuClick}
-            className="md:hidden p-2 -ml-1 text-[#800000] hover:bg-[#fdf5f6] rounded-xl transition-colors cursor-pointer"
+            aria-label="Open menu"
+            aria-controls="app-sidebar"
+            aria-expanded={isMenuOpen}
+            className="lg:hidden p-2 -ml-1 text-[#800000] hover:bg-[#fdf5f6] rounded-xl transition-colors cursor-pointer"
             title="Open Menu"
           >
             <Menu className="w-5 h-5" />
@@ -128,9 +150,13 @@ export function TopBar({ onMenuClick }: TopBarProps) {
           <div className="h-6 w-px bg-[#ebd5da] mx-1 hidden sm:block"></div>
 
           {/* User Profile dropdown */}
-          <div className="relative group">
+          <div className="relative" ref={accountMenu}>
             <button 
               type="button"
+              aria-label="Account menu"
+              aria-expanded={isAccountMenuOpen}
+              aria-controls="account-menu"
+              onClick={() => setIsAccountMenuOpen(open => !open)}
               className="flex items-center gap-2 p-1 rounded-xl hover:bg-[#fdf5f6] transition-colors cursor-pointer"
             >
               <div className="w-7 h-7 rounded-lg bg-[#800000] text-white flex items-center justify-center font-black text-xs shadow-xs">
@@ -146,14 +172,14 @@ export function TopBar({ onMenuClick }: TopBarProps) {
               </div>
             </button>
             
-            <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-[#ebd5da] py-1 hidden group-hover:block z-50">
+            {isAccountMenuOpen && <div id="account-menu" className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-[#ebd5da] py-1 z-50">
               <div className="px-4 py-2 border-b border-[#ebd5da] bg-[#fdf5f6]">
                 <p className="text-xs font-black text-[#800000] truncate">{profile?.displayName || 'User'}</p>
                 <p className="text-[10px] text-[#800000]/70 truncate font-semibold">{user?.email}</p>
               </div>
               <button 
                 type="button"
-                onClick={() => setIsHardwareModalOpen(true)}
+                onClick={() => { setIsAccountMenuOpen(false); setIsHardwareModalOpen(true); }}
                 className="w-full text-left px-4 py-2 text-xs text-[#800000] hover:bg-[#fdf5f6] flex items-center gap-2 font-bold cursor-pointer"
               >
                 <Cpu className="w-3.5 h-3.5 text-[#800000]" /> Peripherals & Printers
@@ -165,7 +191,7 @@ export function TopBar({ onMenuClick }: TopBarProps) {
               >
                 <LogOut className="w-3.5 h-3.5 text-[#800000]" /> Sign out
               </button>
-            </div>
+            </div>}
           </div>
         </div>
       </header>
