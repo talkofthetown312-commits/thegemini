@@ -85,8 +85,8 @@ export function BillingModal({
   }
 
   const taxableAmount = Math.max(0, subtotal - discountAmount);
-  const cgst = taxableAmount * 0.025; // 2.5%
-  const sgst = taxableAmount * 0.025; // 2.5%
+  const cgst = import.meta.env.VITE_TALKOS_ORIGINAL_OFFLINE === '1' ? 0 : taxableAmount * 0.025; // Tax needs owner confirmation before offline use
+  const sgst = import.meta.env.VITE_TALKOS_ORIGINAL_OFFLINE === '1' ? 0 : taxableAmount * 0.025;
   const tax = cgst + sgst; // 5% total GST
   const grandTotal = Math.round((taxableAmount + tax) * 100) / 100;
 
@@ -457,11 +457,11 @@ export function BillingModal({
                 <span>₹{taxableAmount.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-[#800000]/70">
-                <span>CGST (2.5%)</span>
+                <span>{import.meta.env.VITE_TALKOS_ORIGINAL_OFFLINE === '1' ? 'CGST (not configured)' : 'CGST (2.5%)'}</span>
                 <span>₹{cgst.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-[#800000]/70">
-                <span>SGST (2.5%)</span>
+                <span>{import.meta.env.VITE_TALKOS_ORIGINAL_OFFLINE === '1' ? 'SGST (not configured)' : 'SGST (2.5%)'}</span>
                 <span>₹{sgst.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-lg font-black text-[#800000] pt-2 border-t-2 border-[#800000]">
@@ -495,6 +495,8 @@ export function BillingModal({
                 </button>
                 <button
                   type="button"
+                  disabled={import.meta.env.VITE_TALKOS_ORIGINAL_OFFLINE === '1'}
+                  title={import.meta.env.VITE_TALKOS_ORIGINAL_OFFLINE === '1' ? 'Digital payment confirmation not enabled in offline version' : 'Select UPI'}
                   onClick={() => setActivePaymentMethod('UPI')}
                   className={`py-3 px-2 rounded-xl text-xs font-black flex flex-col items-center justify-center gap-1.5 border transition-all cursor-pointer ${
                     activePaymentMethod === 'UPI'
@@ -507,6 +509,8 @@ export function BillingModal({
                 </button>
                 <button
                   type="button"
+                  disabled={import.meta.env.VITE_TALKOS_ORIGINAL_OFFLINE === '1'}
+                  title={import.meta.env.VITE_TALKOS_ORIGINAL_OFFLINE === '1' ? 'Card settlement is unavailable offline' : 'Select card'}
                   onClick={() => setActivePaymentMethod('CARD')}
                   className={`py-3 px-2 rounded-xl text-xs font-black flex flex-col items-center justify-center gap-1.5 border transition-all cursor-pointer ${
                     activePaymentMethod === 'CARD'
