@@ -204,10 +204,16 @@ export function LoginPage() {
         </>
       )}
       {isNativeApp && (
-        <p className="mt-5 text-center text-xs text-[#800000]/70">
-          Android TalkOS: sign in once with your TalkOS email and password.
-          Your Chrome website session is separate from this installed app.
-        </p>
+        <div className="mt-6 space-y-3">
+          <Link to="/offline-inventory"
+            className="flex w-full items-center justify-center rounded-xl border-2 border-[#800000] bg-[#fdf5f6] px-4 py-3 text-center text-sm font-black text-[#800000]">
+            View saved inventory · 144 items · Offline
+          </Link>
+          <p className="text-center text-xs text-[#800000]/70">
+            Read-only master catalogue works without sign-in. For stock quantities
+            and restaurant operations, sign in with your TalkOS email.
+          </p>
+        </div>
       )}
 
     </div>
