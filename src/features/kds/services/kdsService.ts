@@ -2,9 +2,25 @@ import { collection, query, where, onSnapshot, doc, updateDoc, getDocs, setDoc, 
 import { Ticket, Station, TicketItemStatus, OrderStatus, TicketItem } from '../models/kds';
 import { db } from '../../../core/firebase/firebaseConfig';
 import { transitionTicketItem } from './ticketTransitions';
+import { loadFreshLedger, updateKitchen, updateLocalTicketItem, type FreshLedger, type LocalOrder } from '../../../recovery/localEngine';
+const offline = import.meta.env.VITE_TALKOS_ORIGINAL_OFFLINE === '1';
+function fromLocal(state: FreshLedger): Ticket[] {
+  return state.orders.filter(o => o.kitchen !== 'SERVED').map((order: LocalOrder) => ({
+    id: order.id, orderId: order.id, orderNumber: order.number, type: order.type,
+    tableNumber: order.table, status: order.kitchen, createdAt: order.createdAt,
+    targetTime: new Date(new Date(order.createdAt).getTime() + 20 * 60 * 1000).toISOString(),
+    priority: 'NORMAL', items: order.items.map((line, index) => {
+      const id = order.id + ':' + index;
+      return { id, productId: line.productId, productName: line.name,
+        size: line.size, quantity: line.quantity, modifiers: [], stationId: 'st_1',
+        status: (order.itemStatuses?.[id] || (order.kitchen === 'READY' ? 'READY' : 'PENDING')) as TicketItemStatus };
+    })
+  }));
+}
 
 class KdsService {
   async getStations(): Promise<Station[]> {
+    if (offline) return [{ id: 'st_1', name:'Kitchen', type:'KITCHEN', isActive:true }];
     if (!db) throw new Error('Kitchen stations unavailable: database not configured');
     const q = query(collection(db, 'stations'));
     const snapshot = await getDocs(q);
@@ -13,6 +29,13 @@ class KdsService {
 
   // Real-time listener for tickets
   subscribeToTickets(stationId: string | null, callback: (tickets: Ticket[]) => void, onError: (error: Error) => void): () => void {
+    if (offline) {
+      let active = true;
+      const emit = () => { void loadFreshLedger().then(s => { if (active) callback(fromLocal(s)); }).catch(onError); };
+      emit();
+      window.addEventListener('talkos:local-ledger-updated', emit);
+      return () => { active = false; window.removeEventListener('talkos:local-ledger-updated', emit); };
+    }
     if (!db) {
       onError(new Error('Firestore is not configured. Kitchen tickets cannot be loaded.'));
       return () => {};
@@ -46,6 +69,14 @@ class KdsService {
   }
 
   async updateTicketStatus(ticketId: string, status: OrderStatus): Promise<void> {
+    if (offline) {
+      const normalized = status === 'ACCEPTED' ? 'PREPARING' : status;
+      if (normalized !== 'PREPARING' && normalized !== 'READY' && normalized !== 'SERVED') {
+        throw new Error('This kitchen transition is not available in offline mode.');
+      }
+      await updateKitchen(ticketId, normalized);
+      return;
+    }
     if (!db) throw new Error('Firestore is not configured. Cannot update kitchen ticket.');
     const ticketRef = doc(db, 'tickets', ticketId);
     await updateDoc(ticketRef, {
@@ -56,6 +87,7 @@ class KdsService {
   }
 
   async updateItemStatus(ticketId: string, itemId: string, status: TicketItemStatus, items: TicketItem[]): Promise<void> {
+    if (offline) { await updateLocalTicketItem(ticketId, itemId, status); return; }
     if (!db) throw new Error('Firestore is not configured. Cannot update kitchen item.');
     const ticketRef = doc(db, 'tickets', ticketId);
     // The items argument is retained for existing callers, but must never be
