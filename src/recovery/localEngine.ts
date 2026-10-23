@@ -19,6 +19,7 @@ export interface LocalOrder {
   id: string; number: string; items: LocalOrderLine[]; total: number;
   type: OrderType; table?: string; createdAt: string; createdBy: string;
   kitchen: KitchenState; payment: PaymentState; cashTendered?: number;
+  itemStatuses?: Record<string, 'PENDING' | 'PREPARING' | 'READY' | 'CANCELLED'>;
 }
 export interface StockCount {
   id: string; itemId: string; oldQty: number; newQty: number;
@@ -360,6 +361,29 @@ export async function cancelLocalOrder(orderId: string, reason: string): Promise
     if (!order) throw new Error('Order not found');
     if (order.payment === 'CASH_RECEIVED') throw new Error('Paid order refunds require a separate cash-adjustment workflow. Original receipt remains on record.');
     order.kitchen = 'SERVED';
+    await persist(state);
+    return touchSnapshot(state);
+  });
+}
+
+/** Persist local kitchen item progress, while respecting the order-level workflow. */
+export async function updateLocalTicketItem(orderId: string, itemId: string, status: 'PENDING' | 'PREPARING' | 'READY' | 'CANCELLED'): Promise<FreshLedger> {
+  return serialized(async () => {
+    permit(['OWNER', 'KITCHEN']);
+    const state = await read();
+    const order = state.orders.find(o => o.id === orderId);
+    if (!order) throw new Error('Kitchen order not found');
+    const index = order.items.findIndex((_, n) => order.id + ':' + n === itemId);
+    if (index < 0) throw new Error('Kitchen ticket item not found');
+    const known = order.itemStatuses?.[itemId] || 'PENDING';
+    if (known === status) return touchSnapshot(state);
+    if (status === 'CANCELLED') throw new Error('Voids need owner approval; cannot cancel an ingredient from a paid sale silently.');
+    const valid = (known === 'PENDING' && status === 'PREPARING') ||
+      (known === 'PREPARING' && status === 'READY');
+    if (!valid) throw new Error('Kitchen item status transition is not allowed');
+    order.itemStatuses = { ...(order.itemStatuses || {}), [itemId]: status };
+    if (status === 'PREPARING' && order.kitchen === 'NEW') order.kitchen = 'PREPARING';
+    if (order.items.every((_, n) => order.itemStatuses?.[order.id + ':' + n] === 'READY')) order.kitchen = 'READY';
     await persist(state);
     return touchSnapshot(state);
   });
