@@ -1,6 +1,10 @@
 name: TalkOS Android Staging APK
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/android-apk.yml'
 permissions:
   contents: read
 jobs:
