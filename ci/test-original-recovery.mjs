@@ -49,7 +49,7 @@ try {
   await shown(page.getByText('Menu Management'),'editable menu screen');
   await shown(page.getByText('Veg Chowmein'),'existing products in menu manager');
   console.log('STEP: verify offline KDS');
-  await page.getByRole('link',{name:'Kitchen',exact:true}).first().click();
+  await page.locator('nav[aria-label="Quick navigation"] a[href="/kds"]').click();
   await shown(page.locator('body'),'kitchen page');
   await page.screenshot({path:'recovery-evidence/kitchen.png'});
   if(firebaseRequests) throw new Error('Original offline recovery unexpectedly made '+firebaseRequests+' Firebase requests.');
