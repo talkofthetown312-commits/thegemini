@@ -67,6 +67,7 @@ jobs:
           cd /tmp/talkos-capacitor-tools
           ./node_modules/.bin/cap add android
           ./node_modules/.bin/cap sync android
+          ./node_modules/.bin/capacitor-assets generate --android --iconBackgroundColor '#000000' --iconBackgroundColorDark '#000000' --splashBackgroundColor '#000000' --splashBackgroundColorDark '#000000'
       - name: Build debug APK alongside Capacitor dependencies
         shell: bash
         run: |
