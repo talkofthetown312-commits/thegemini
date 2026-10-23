@@ -40,7 +40,10 @@ jobs:
         run: test "$VITE_TALKOS_ORIGINAL_OFFLINE" = 1
       - run: npm ci --no-audit --no-fund
       - run: npm run lint
-      - run: npm test
+      - name: Validate unchanged cloud-mode regression tests
+        run: npm test
+        env:
+          VITE_TALKOS_ORIGINAL_OFFLINE: '0'
       - run: npm run build:pwa
       - name: Retire legacy service worker
         run: cp ci/android-sw-retire.js dist/sw.js
