@@ -9,20 +9,7 @@ class InventoryService {
     const q = query(collection(db, 'inventory_categories'));
     const snapshot = await getDocs(q);
     
-    if (snapshot.empty) {
-      const seedCategories = [
-        { name: 'Raw Materials', isActive: true },
-        { name: 'Finished Goods', isActive: true },
-        { name: 'Packaging', isActive: true },
-        { name: 'Consumables', isActive: true }
-      ];
-      const categories: Category[] = [];
-      for (const cat of seedCategories) {
-        categories.push(await this.addCategory(cat));
-      }
-      return categories;
-    }
-    
+    // Empty inventory setup is a valid state; never write demo categories.
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Category));
   }
 
@@ -43,16 +30,7 @@ class InventoryService {
     const q = query(collection(db, 'inventory_warehouses'));
     const snapshot = await getDocs(q);
     
-    if (snapshot.empty) {
-      const mainWarehouse = await this.addWarehouse({
-        name: 'Main Store',
-        type: 'MAIN_STORE',
-        location: 'HQ',
-        isActive: true
-      });
-      return [mainWarehouse];
-    }
-    
+    // Do not invent a default warehouse when none has been configured.
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Warehouse));
   }
 
