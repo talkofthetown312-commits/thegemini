@@ -4,6 +4,7 @@ import { auth } from '../firebase/firebaseConfig';
 import { logger } from '../logging/logger';
 import { authService, UserProfile } from '../../features/auth/services/authService';
 import { useAppStore } from '../store/appStore';
+import { useRecoveryAuthOptional } from '../../recovery/RecoveryAuth';
 
 interface AuthContextType {
   user: any | null;
@@ -112,6 +113,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   const context = useContext(AuthContext);
+  const recovery = useRecoveryAuthOptional();
+  if (import.meta.env.VITE_TALKOS_ORIGINAL_OFFLINE === '1' && recovery) return recovery as unknown as AuthContextType;
   if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
