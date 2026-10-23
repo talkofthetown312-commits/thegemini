@@ -10,5 +10,9 @@ extraMetadata:
   main: dist-electron/main.cjs
 asar: true
 win:
+  icon: assets/icon.png
   target: portable
   artifactName: TalkOS-Windows-Staging-${version}.${ext}
+mac:
+  icon: assets/icon.png
+  target: dmg
