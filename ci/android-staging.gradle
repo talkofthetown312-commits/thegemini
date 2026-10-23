@@ -1,0 +1,32 @@
+// Applied AFTER Capacitor's generated configuration. Never rely on AGP's
+// default debug keystore: Android tooling can use a different user home.
+def stagingKeystore = System.getenv('TALKOS_STAGING_KEYSTORE')
+if (!stagingKeystore || !new File(stagingKeystore).isFile()) {
+    throw new GradleException('The retained TalkOS staging keystore is required')
+}
+def stagingVersion = providers.gradleProperty('talkosVersionCode').get().toInteger()
+if (stagingVersion <= 19 || stagingVersion > 2100000000) {
+    throw new GradleException('Invalid or non-incrementing TalkOS versionCode')
+}
+android {
+    signingConfigs {
+        talkosStaging {
+            storeFile = new File(stagingKeystore)
+            storePassword = 'android'
+            keyAlias = 'androiddebugkey'
+            keyPassword = 'android'
+            storeType = 'JKS'
+            enableV1Signing = true
+            enableV2Signing = true
+        }
+    }
+    defaultConfig {
+        applicationId = 'com.talkofthetown.pos'
+        versionCode = stagingVersion
+    }
+    buildTypes {
+        debug {
+            signingConfig = signingConfigs.talkosStaging
+        }
+    }
+}

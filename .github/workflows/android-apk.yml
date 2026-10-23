@@ -9,7 +9,11 @@ on:
       - 'src/**'
       - 'public/**'
       - 'index.html'
-      - 'ci/staging-debug-cert.sha256'
+      - 'ci/**'
+      - 'capacitor.config.ts'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vite.config.ts'
 concurrency:
   group: talkos-android-staging
   cancel-in-progress: true
@@ -20,6 +24,10 @@ jobs:
   android-apk:
     runs-on: ubuntu-latest
     timeout-minutes: 35
+    strategy:
+      max-parallel: 1
+      matrix:
+        build: [baseline, candidate]
     env:
       VITE_FIREBASE_API_KEY: ${{ vars.TALKOS_TEST_FIREBASE_API_KEY }}
       VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.TALKOS_TEST_FIREBASE_AUTH_DOMAIN }}
@@ -44,7 +52,7 @@ jobs:
           set -euo pipefail
           echo "ANDROID_HOME=${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
           test -d "${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
-          ls "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/platforms" || true
+          sdkmanager 'build-tools;35.0.0'
       - name: Confirm isolated staging target
         shell: bash
         run: |
@@ -82,42 +90,29 @@ jobs:
         with:
           path: ~/.android/debug.keystore
           key: talkos-staging-debug-signing-v1
-      - name: Ensure staging signer has not silently rotated
+      - name: Require and pin the retained staging signing key
         shell: bash
         run: |
           set -euo pipefail
-          if [ "${{ steps.staging-signing.outputs.cache-hit }}" != "true" ] && [ -f ci/staging-debug-cert.sha256 ]; then
-            echo "::error::Pinned staging signing key missing from CI cache. Refusing to create another incompatible APK."
+          test "${{ steps.staging-signing.outputs.cache-hit }}" = true || {
+            echo "::error::Retained staging keystore missing. Refusing to generate an incompatible identity."
             exit 1
-          fi
-      - name: Bootstrap staging-only debug signer
-        if: steps.staging-signing.outputs.cache-hit != 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p "$HOME/.android"
-          keytool -genkeypair -alias androiddebugkey -keystore "$HOME/.android/debug.keystore" \
-            -storetype JKS -storepass android -keypass android -keyalg RSA -keysize 2048 \
-            -validity 10000 -dname "CN=TalkOS STAGING ONLY, O=Talk of the Town, C=IN" -noprompt
-      - name: Verify pinned Android signer before packaging
-        shell: bash
-        run: |
-          set -euo pipefail
+          }
           test -s "$HOME/.android/debug.keystore"
           signer_sha="$(keytool -exportcert -alias androiddebugkey -keystore "$HOME/.android/debug.keystore" -storepass android | sha256sum | cut -d' ' -f1)"
-          echo "TalkOS staging certificate SHA256: $signer_sha"
-          if [ -f ci/staging-debug-cert.sha256 ]; then
-            test "$signer_sha" = "$(head -c 64 ci/staging-debug-cert.sha256)" || {
-              echo "::error::Staging APK signing certificate mismatch. Refusing un-installable update."
-              exit 1
-            }
-          fi
-      - name: Preserve staging key for later APK builds
-        if: steps.staging-signing.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: ~/.android/debug.keystore
-          key: talkos-staging-debug-signing-v1
+          test "$signer_sha" = "$(cat ci/staging-debug-cert.sha256)"
+          echo "Retained staging certificate: $signer_sha"
+          echo "TALKOS_STAGING_KEYSTORE=$HOME/.android/debug.keystore" >> "$GITHUB_ENV"
+      - name: Allocate increasing versions for independent builds
+        shell: bash
+        env:
+          BUILD_KIND: ${{ matrix.build }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_RUN_ATTEMPT" -lt 50
+          version=$((1000 + GITHUB_RUN_NUMBER * 100 + GITHUB_RUN_ATTEMPT * 2))
+          if [ "$BUILD_KIND" = candidate ]; then version=$((version + 1)); fi
+          echo "TALKOS_VERSION_CODE=$version" >> "$GITHUB_ENV"
       - name: Generate Android project
         shell: bash
         run: |
@@ -126,35 +121,91 @@ jobs:
           ./node_modules/.bin/cap add android
           ./node_modules/.bin/cap sync android
           ./node_modules/.bin/capacitor-assets generate --android --iconBackgroundColor '#000000' --iconBackgroundColorDark '#000000' --splashBackgroundColor '#000000' --splashBackgroundColorDark '#000000'
-          # Monotonic Android versionCode also lets Android recognize updates correctly.
-          sed -i -E "s/versionCode [0-9]+/versionCode ${GITHUB_RUN_NUMBER}/" android/app/build.gradle
-          grep -E "applicationId|versionCode" android/app/build.gradle
-      - name: Build debug APK alongside Capacitor dependencies
+          cp "$GITHUB_WORKSPACE/ci/android-staging.gradle" android/app/talkos-staging.gradle
+          printf '\napply from: "talkos-staging.gradle"\n' >> android/app/build.gradle
+      - name: Build APK with the explicit retained signer
         shell: bash
         run: |
           set -euo pipefail
           cd /tmp/talkos-capacitor-tools/android
-          bash ./gradlew assembleDebug --no-daemon
-      - name: Validate APK package and certificate
+          bash ./gradlew assembleDebug --no-daemon -PtalkosVersionCode="$TALKOS_VERSION_CODE"
+      - name: Validate the actual APK with Android SDK tools
         shell: bash
         run: |
           set -euo pipefail
-          sdk="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
-          apk="/tmp/talkos-capacitor-tools/android/app/build/outputs/apk/debug/app-debug.apk"
-          apksigner="$(find "$sdk/build-tools" -name apksigner -type f | sort -V | tail -n 1)"
-          aapt="$(find "$sdk/build-tools" -name aapt -type f | sort -V | tail -n 1)"
-          test -s "$apk" && test -x "$apksigner" && test -x "$aapt"
-          "$apksigner" verify --verbose --print-certs "$apk"
-          package="$("$aapt" dump badging "$apk" | head -n 1 | cut -d "'" -f 2)"
-          test "$package" = "com.talkofthetown.pos" || { echo "::error::Unexpected package $package"; exit 1; }
-          actual_sha="$("$apksigner" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -1)"
-          key_sha="$(keytool -exportcert -alias androiddebugkey -keystore "$HOME/.android/debug.keystore" -storepass android | sha256sum | cut -d' ' -f1)"
-          test "$actual_sha" = "$key_sha" || { echo "::error::APK is not signed with the pinned staging identity"; exit 1; }
-          echo "Verified TalkOS package $package signed with staging certificate $actual_sha"
-      - name: Publish APK artifact
+          python ci/test-apk-validation.py
+          mkdir -p apk-output
+          cp /tmp/talkos-capacitor-tools/android/app/build/outputs/apk/debug/app-debug.apk apk-output/TalkOS-STAGING.apk
+          python ci/validate-android-apk.py apk-output/TalkOS-STAGING.apk \
+            --version "$TALKOS_VERSION_CODE" --sdk "$ANDROID_HOME" --report apk-output/validation.json
+      - name: Retain independent build for upgrade testing
         uses: actions/upload-artifact@v4
         with:
-          name: TalkOS-Android-STAGING-debug
-          path: /tmp/talkos-capacitor-tools/android/app/build/outputs/apk/debug/app-debug.apk
+          name: TalkOS-APK-${{ matrix.build }}-${{ github.run_attempt }}
+          path: apk-output/
           if-no-files-found: error
+          retention-days: 7
+
+  install-and-upgrade:
+    needs: android-apk
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/download-artifact@v4
+        with:
+          name: TalkOS-APK-baseline-${{ github.run_attempt }}
+          path: baseline
+      - uses: actions/download-artifact@v4
+        with:
+          name: TalkOS-APK-candidate-${{ github.run_attempt }}
+          path: candidate
+      - name: Verify both independently built APKs again
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager 'build-tools;35.0.0'
+          baseline_version=$((1000 + GITHUB_RUN_NUMBER * 100 + GITHUB_RUN_ATTEMPT * 2))
+          python ci/validate-android-apk.py baseline/TalkOS-STAGING.apk --version "$baseline_version" --sdk "$ANDROID_HOME" --report evidence/baseline.json
+          python ci/validate-android-apk.py candidate/TalkOS-STAGING.apk --version "$((baseline_version + 1))" --sdk "$ANDROID_HOME" --report evidence/candidate.json
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Test fresh installation and data-preserving upgrade on Android 16
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          target: google_apis
+          arch: x86_64
+          profile: pixel_7_pro
+          disable-animations: true
+          script: bash ci/test-android-upgrade.sh baseline/TalkOS-STAGING.apk candidate/TalkOS-STAGING.apk evidence
+      - name: Confirm installed version
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected=$((1000 + GITHUB_RUN_NUMBER * 100 + GITHUB_RUN_ATTEMPT * 2 + 1))
+          grep -Eq "versionCode=$expected( |$)" evidence/installed-package.txt
+          cp candidate/TalkOS-STAGING.apk evidence/TalkOS-STAGING.apk
+          sha256sum evidence/TalkOS-STAGING.apk > evidence/APK-SHA256.txt
+          cat evidence/install-upgrade.txt >> "$GITHUB_STEP_SUMMARY"
+      - name: Publish validated installable APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: TalkOS-Android-STAGING-validated-${{ github.run_attempt }}
+          path: evidence/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Preserve test evidence on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TalkOS-Android-test-evidence-${{ github.run_attempt }}
+          path: evidence/
           retention-days: 7
