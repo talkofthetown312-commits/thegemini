@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { usePosStore } from '../store/posStore';
+import { photoForProduct } from '../data/foodImages';
 import { Product, ItemSize, Order } from '../models/pos';
 import { 
   Loader2, 
@@ -701,6 +702,13 @@ export function PosPage() {
                       className="bg-white p-3 md:p-4 rounded-xl border border-[#ebd5da] shadow-xs cursor-pointer hover:border-[#800000] hover:shadow-sm transition-all group flex flex-col justify-between active:scale-[0.98]"
                       onClick={() => handleProductClick(product)}
                     >
+                      {photoForProduct(product) && (
+                        <div className="mb-2 overflow-hidden rounded-lg border border-[#ebd5da] bg-[#fff9f7]">
+                          <img src={photoForProduct(product)!} alt={product.name + ' – Talk of the Town menu artwork'}
+                            loading="lazy" className="h-24 w-full object-contain sm:h-28"
+                            onError={e => { e.currentTarget.style.display = 'none'; }} />
+                        </div>
+                      )}
                       <div>
                         <div className="flex justify-between items-start mb-1.5">
                           <span className="text-[9px] md:text-[10px] uppercase font-black tracking-widest text-[#800000]/70">
