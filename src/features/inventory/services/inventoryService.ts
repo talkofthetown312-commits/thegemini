@@ -1,10 +1,18 @@
 import { collection, query, getDocs, doc, setDoc, updateDoc, deleteDoc, runTransaction } from 'firebase/firestore';
 import { db } from '../../../core/firebase/firebaseConfig';
 import { InventoryItem, Category, Warehouse, StockTransaction, ItemBatch, StorageLocation, CycleCount } from '../models/inventory';
+import { loadFreshLedger, recordStockCount } from '../../../recovery/localEngine';
+const offline = import.meta.env.VITE_TALKOS_ORIGINAL_OFFLINE === '1';
 
 class InventoryService {
   // --- Categories ---
   async getCategories(): Promise<Category[]> {
+    if (offline) {
+      const state = await loadFreshLedger();
+      return Array.from(new Set(state.inventory.map(i => i.category))).map(category => ({
+        id: category, name: category, isActive: true, createdAt: state.initializedAt
+      }));
+    }
     if (!db) throw new Error("Firestore is not initialized");
     const q = query(collection(db, 'inventory_categories'));
     const snapshot = await getDocs(q);
@@ -26,6 +34,7 @@ class InventoryService {
 
   // --- Warehouses ---
   async getWarehouses(): Promise<Warehouse[]> {
+    if (offline) return []; // No fictional warehouse created.
     if (!db) throw new Error("Firestore is not initialized");
     const q = query(collection(db, 'inventory_warehouses'));
     const snapshot = await getDocs(q);
@@ -46,6 +55,7 @@ class InventoryService {
 
   // --- Storage Locations ---
   async getStorageLocations(): Promise<StorageLocation[]> {
+    if (offline) return [];
     if (!db) throw new Error("Firestore is not initialized");
     const q = query(collection(db, 'inventory_storage_locations'));
     const snapshot = await getDocs(q);
@@ -64,6 +74,16 @@ class InventoryService {
 
   // --- Items ---
   async getItems(): Promise<InventoryItem[]> {
+    if (offline) {
+      const state = await loadFreshLedger();
+      return state.inventory.map(item => ({
+        id: item.id, sku: item.id, name: item.name, categoryId: item.category,
+        unit: item.unit, costPrice: 0, sellingPrice: 0, reorderLevel: 0,
+        minimumStock: 0, valuationMethod: 'WEIGHTED_AVERAGE' as const,
+        currentStock: item.currentStock, status: item.stockVerified ? 'ACTIVE' as const : 'INACTIVE' as const,
+        lastUpdated: state.initializedAt, createdAt: state.initializedAt
+      }));
+    }
     if (!db) throw new Error("Firestore is not initialized");
     const q = query(collection(db, 'inventory_items'));
     const snapshot = await getDocs(q);
@@ -95,6 +115,7 @@ class InventoryService {
 
   // --- Batches ---
   async getBatches(): Promise<ItemBatch[]> {
+    if (offline) return [];
     if (!db) throw new Error("Firestore is not initialized");
     const q = query(collection(db, 'inventory_batches'));
     const snapshot = await getDocs(q);
@@ -118,6 +139,7 @@ class InventoryService {
 
   // --- Cycle Counts ---
   async getCycleCounts(): Promise<CycleCount[]> {
+    if (offline) return [];
     if (!db) throw new Error("Firestore is not initialized");
     const q = query(collection(db, 'inventory_cycle_counts'));
     const snapshot = await getDocs(q);
@@ -142,6 +164,13 @@ class InventoryService {
 
   // --- Transactions ---
   async recordTransaction(transactionData: Omit<StockTransaction, 'id' | 'date'> & { idempotencyKey?: string }): Promise<StockTransaction> {
+    if (offline) {
+      if (transactionData.type !== 'PHYSICAL_VERIFICATION')
+        throw new Error('Only verified physical stock counting is enabled offline. Other stock movements require an audited workflow.');
+      const saved = await recordStockCount(transactionData.itemId, transactionData.quantity);
+      return { ...transactionData, id: saved.stockCounts[saved.stockCounts.length - 1].id,
+        date: saved.stockCounts[saved.stockCounts.length - 1].recordedAt };
+    }
     if (!db) throw new Error("Firestore is not initialized");
     const { idempotencyKey, ...stockData } = transactionData;
     if (idempotencyKey && !/^[A-Za-z0-9_-]{1,180}$/.test(idempotencyKey)) throw new Error('Invalid stock transaction idempotency key');
