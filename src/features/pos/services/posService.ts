@@ -3,10 +3,13 @@ import { db, auth } from '../../../core/firebase/firebaseConfig';
 import { Product, Order, MenuItemSize } from '../models/pos';
 import { INITIAL_MENU_ITEMS, getAllMenuItemSizes } from '../data/menuData';
 import { visibleCustomerProducts, sizesForCustomerProduct, validateCustomerProduct } from './customerCatalogue';
+import { loadFreshLedger, saveLocalMenuProduct, setLocalMenuAvailability } from '../../../recovery/localEngine';
+const offline = import.meta.env.VITE_TALKOS_ORIGINAL_OFFLINE === '1';
 
 class PosService {
 
   async getAllProducts(): Promise<Product[]> {
+    if (offline) return (await loadFreshLedger()).menu;
     // Firestore is the source of truth for the customer's menu, including
     // newly created products, edited prices and availability.
     if (db) {
@@ -21,6 +24,7 @@ class PosService {
   }
 
   async syncInitialMenu(isCollectionEmpty = false): Promise<void> {
+    if (offline) return; // Menu is seeded once locally and never overwritten.
     // Never attempt Firestore write if no db or if user is unauthenticated (prevents 403)
     if (!db || !auth.currentUser || !isCollectionEmpty) return;
 
@@ -45,6 +49,10 @@ class PosService {
   }
 
   async getMenuItemSizes(itemId?: string): Promise<MenuItemSize[]> {
+    if (offline) {
+      const products = (await loadFreshLedger()).menu;
+      return products.flatMap(sizesForCustomerProduct).filter(size => !itemId || size.item_id === itemId);
+    }
     if (db) {
       const snapshot = await getDocs(query(collection(db, 'pos_products')));
       const products = snapshot.docs.map(record => ({ ...record.data(), id: record.id } as Product));
@@ -55,6 +63,13 @@ class PosService {
   }
 
   async addProduct(productData: Omit<Product, 'id'>): Promise<Product> {
+    if (offline) {
+      const id = crypto.randomUUID();
+      const product: Product = { ...productData, id, sizes: productData.sizes.map(size => ({...size, item_id:id})) };
+      validateCustomerProduct(product);
+      await saveLocalMenuProduct(product);
+      return product;
+    }
     if (!db || !auth.currentUser) throw new Error('Sign in to save a customer menu item.');
     validateCustomerProduct({ ...productData, id: 'new' });
     const id = doc(collection(db, 'pos_products')).id;
@@ -74,6 +89,11 @@ class PosService {
   }
 
   async updateProduct(product: Product): Promise<void> {
+    if (offline) {
+      validateCustomerProduct(product);
+      await saveLocalMenuProduct(product);
+      return;
+    }
     if (!db || !auth.currentUser) throw new Error('Sign in to edit menu items.');
     validateCustomerProduct(product);
     const batch = writeBatch(db);
@@ -86,12 +106,21 @@ class PosService {
   }
 
   async setProductAvailability(productId: string, available: boolean): Promise<void> {
+    if (offline) return setLocalMenuAvailability(productId, available);
     if (!db || !auth.currentUser) throw new Error('Sign in to change menu availability.');
     if (!productId.trim()) throw new Error('Missing product ID.');
     await updateDoc(doc(db, 'pos_products', productId), { isAvailable: available });
   }
 
   async getOrders(): Promise<Order[]> {
+    if (offline) return (await loadFreshLedger()).orders.map(order => ({
+      id: order.id, orderNumber: order.number, orderType: order.type,
+      tableNumber: order.table, items: order.items,
+      subtotal: order.total, tax: 0, total: order.total,
+      paymentMethod: order.payment === 'CASH_RECEIVED' ? 'CASH' : undefined,
+      status: order.payment === 'CASH_RECEIVED' ? 'PAID' as const : 'PENDING' as const,
+      createdAt: order.createdAt
+    })).reverse();
     if (!db) throw new Error('Firestore is not configured. Order history is unavailable.');
     const snapshot = await getDocs(query(collection(db, 'pos_orders')));
     return snapshot.docs
@@ -100,6 +129,7 @@ class PosService {
   }
 
   async updateOrderStatus(orderId: string, status: Order['status'], voidReason?: string): Promise<void> {
+    if (offline) throw new Error('Refund/void journal is not enabled offline. Keep the original payment record and use the owner cash adjustment workflow.');
     if (!db) throw new Error('Firestore is not configured. Cannot update order status.');
     await updateDoc(doc(db, 'pos_orders', orderId), {
       status,
@@ -109,6 +139,7 @@ class PosService {
   }
 
   async createOrder(orderData: Omit<Order, 'id' | 'createdAt' | 'orderNumber'>): Promise<Order> {
+    if (offline) throw new Error('Use the atomic local cash checkout; direct backend writes are disabled.');
     if (!db) throw new Error('Firestore is not configured. Checkout is unavailable.');
     if (!auth.currentUser) throw new Error('Sign in before completing a sale.');
 
