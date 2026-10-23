@@ -102,6 +102,28 @@
         }
       })();
     </script>
+    <script>
+      // Android APKs serve their UI from installed assets, not a web PWA.
+      // Clear any older service-worker cache registrations that could keep
+      // showing yesterday's APK UI after an update. Local app data is retained.
+      (function () {
+        var nativeAndroid = window.location.hostname === 'localhost' &&
+          window.location.protocol === 'https:';
+        if (!nativeAndroid) return;
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.getRegistrations().then(function (registrations) {
+            return Promise.all(registrations.map(function (registration) {
+              return registration.unregister();
+            }));
+          }).catch(function () {});
+        }
+        if ('caches' in window) {
+          caches.keys().then(function (keys) {
+            return Promise.all(keys.map(function (key) { return caches.delete(key); }));
+          }).catch(function () {});
+        }
+      })();
+    </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>TalkOS Architecture</title>
