@@ -53,7 +53,7 @@ jobs:
           mkdir -p /tmp/talkos-capacitor-tools
           cd /tmp/talkos-capacitor-tools
           npm init -y >/dev/null
-          npm install --no-audit --no-fund --save-exact @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7
+          npm install --no-audit --no-fund --save-exact @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 typescript@5
           ln -s "$GITHUB_WORKSPACE"/dist dist
           cp "$GITHUB_WORKSPACE"/capacitor.config.ts ./capacitor.config.ts
           node -e "const fs=require('fs'); const p=require('./package.json'); p.type='module'; fs.writeFileSync('package.json',JSON.stringify(p,null,2))"
