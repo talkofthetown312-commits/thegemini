@@ -15,6 +15,7 @@ import { validateCheckout } from '../services/checkoutValidation';
 import { inventoryService } from '../../inventory/services/inventoryService';
 import { manufacturingService } from '../../manufacturing/services/manufacturingService';
 import { kdsService } from '../../kds/services/kdsService';
+import { settleLocalCashSale } from '../../../recovery/localEngine';
 
 interface PosState {
   products: Product[];
@@ -294,6 +295,32 @@ export const usePosStore = create<PosState>((set, get) => ({
   },
 
   completeCheckout: async ({ method, details }) => {
+    if (import.meta.env.VITE_TALKOS_ORIGINAL_OFFLINE === '1') {
+      if (get().loading) throw new Error('Checkout is already processing');
+      const { cart, orderType, tableNumber, discount } = get();
+      if (discount && discount.value > 0) throw new Error('Discounted offline bills require owner-approved price rules and are disabled until configured.');
+      if (method !== 'CASH' || details.method !== 'CASH') throw new Error('Only verified physical cash is supported offline. UPI/Card must not be marked as paid without confirmation.');
+      set({ loading: true, error: null });
+      try {
+        const state = await settleLocalCashSale(
+          cart.map(item => ({ productId: item.productId, size: item.size || 'Standard', quantity: item.quantity })),
+          orderType, orderType === 'DINE_IN' ? tableNumber : undefined, details.cashTendered ?? NaN
+        );
+        const saved = state.orders[state.orders.length - 1];
+        const order: Order = {
+          id: saved.id, orderNumber: saved.number, items: cart.map(item => ({...item})),
+          orderType, tableNumber: saved.table, subtotal: saved.total, tax: 0, total: saved.total,
+          paymentMethod: 'CASH', paymentDetails: details, status: 'PAID', createdAt: saved.createdAt,
+          cashierName: 'Talk of the Town'
+        };
+        set({ loading: false, cart: [], lastCompletedOrder: order, ordersHistory: [order, ...get().ordersHistory],
+          discount: null, orderNotes: '', customerName: '', customerPhone: '' });
+        return order;
+      } catch (error) {
+        set({ loading: false, error: error instanceof Error ? error.message : String(error) });
+        throw error;
+      }
+    }
     // Lock synchronously before any await. Rapid taps or keyboard shortcuts must
     // not create multiple paid orders from the same cart.
     if (get().loading) throw new Error('Checkout is already processing. Please wait.');
