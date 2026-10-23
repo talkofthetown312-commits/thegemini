@@ -117,7 +117,7 @@ class PosService {
       id: order.id, orderNumber: order.number, orderType: order.type,
       tableNumber: order.table, items: order.items,
       subtotal: order.total, tax: 0, total: order.total,
-      paymentMethod: order.payment === 'CASH_RECEIVED' ? 'CASH' : undefined,
+      paymentMethod: order.payment === 'CASH_RECEIVED' ? 'CASH' as const : undefined,
       status: order.payment === 'CASH_RECEIVED' ? 'PAID' as const : 'PENDING' as const,
       createdAt: order.createdAt
     })).reverse();
