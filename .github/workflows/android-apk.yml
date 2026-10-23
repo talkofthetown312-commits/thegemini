@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/android-apk.yml'
+      - 'assets/icon.png'
 permissions:
   contents: read
 jobs:
