@@ -4,56 +4,20 @@ import { Floor, Table, Reservation, WaitlistEntry, TableStatus } from '../models
 
 class TableService {
   async getFloors(): Promise<Floor[]> {
-    if (!db) {
-       // Mock for testing
-       return [
-         { id: 'f1', name: 'Main Hall', zone: 'Indoor', isActive: true, order: 1 },
-         { id: 'f2', name: 'Patio', zone: 'Outdoor', isActive: true, order: 2 }
-       ];
-    }
+    if (!db) throw new Error('Table database is unavailable');
     const q = query(collection(db, 'table_floors'));
     const snapshot = await getDocs(q);
     
-    if (snapshot.empty) {
-      // Seed some initial floors
-      const seedFloors = [
-        { id: 'f1', name: 'Main Hall', zone: 'Indoor', isActive: true, order: 1 },
-        { id: 'f2', name: 'Patio', zone: 'Outdoor', isActive: true, order: 2 }
-      ];
-      for (const floor of seedFloors) {
-        await setDoc(doc(db, 'table_floors', floor.id), floor);
-      }
-      return seedFloors;
-    }
-    
+    // No automatically generated floors: an empty restaurant layout remains empty.
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Floor)).sort((a, b) => a.order - b.order);
   }
 
   async getTables(): Promise<Table[]> {
-    if (!db) {
-       return [
-         { id: 't1', floorId: 'f1', tableNumber: '1', capacity: 2, shape: 'SQUARE', positionX: 50, positionY: 50, width: 60, height: 60, status: 'AVAILABLE', locked: false },
-         { id: 't2', floorId: 'f1', tableNumber: '2', capacity: 4, shape: 'RECTANGLE', positionX: 150, positionY: 50, width: 100, height: 60, status: 'OCCUPIED', locked: false },
-         { id: 't3', floorId: 'f1', tableNumber: '3', capacity: 4, shape: 'ROUND', positionX: 300, positionY: 50, width: 80, height: 80, status: 'RESERVED', locked: false },
-         { id: 't4', floorId: 'f2', tableNumber: '10', capacity: 2, shape: 'SQUARE', positionX: 50, positionY: 50, width: 60, height: 60, status: 'AVAILABLE', locked: false }
-       ];
-    }
+    if (!db) throw new Error('Table database is unavailable');
     const q = query(collection(db, 'table_items'));
     const snapshot = await getDocs(q);
     
-    if (snapshot.empty) {
-       const seedTables: Table[] = [
-         { id: 't1', floorId: 'f1', tableNumber: '1', capacity: 2, shape: 'SQUARE', positionX: 50, positionY: 50, width: 60, height: 60, status: 'AVAILABLE', locked: false },
-         { id: 't2', floorId: 'f1', tableNumber: '2', capacity: 4, shape: 'RECTANGLE', positionX: 150, positionY: 50, width: 100, height: 60, status: 'OCCUPIED', locked: false },
-         { id: 't3', floorId: 'f1', tableNumber: '3', capacity: 4, shape: 'ROUND', positionX: 300, positionY: 50, width: 80, height: 80, status: 'RESERVED', locked: false },
-         { id: 't4', floorId: 'f2', tableNumber: '10', capacity: 2, shape: 'SQUARE', positionX: 50, positionY: 50, width: 60, height: 60, status: 'AVAILABLE', locked: false }
-       ];
-       for (const table of seedTables) {
-         await setDoc(doc(db, 'table_items', table.id), table);
-       }
-       return seedTables;
-    }
-    
+    // Never invent occupied or reserved tables when the layout is not configured.
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Table));
   }
   
