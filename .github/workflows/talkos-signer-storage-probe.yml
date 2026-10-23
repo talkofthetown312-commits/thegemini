@@ -27,6 +27,21 @@ jobs:
         run: |
           set -euo pipefail
           # No secrets or keystores are printed, saved or modified here.
+          # Check whether a secure GCP location exists for the retained signer.
+          # Metadata-only probes: no application records are accessed.
+          if gcloud storage buckets list --project talkos-staging-default --format='value(name)' > bucket_names.txt 2>storage_probe_error.txt; then
+            echo "STAGING_BUCKET_DISCOVERY_ALLOWED"
+            head -n 8 bucket_names.txt
+          else
+            echo "STAGING_BUCKET_DISCOVERY_DENIED"
+            head -n 5 storage_probe_error.txt
+          fi
+          if gcloud secrets list --project talkos-staging-default --limit 5 --format='value(name)' > secret_names.txt 2>secret_probe_error.txt; then
+            echo "STAGING_SECRET_MANAGER_ACCESS_ALLOWED"
+          else
+            echo "STAGING_SECRET_MANAGER_ACCESS_DENIED"
+            head -n 5 secret_probe_error.txt
+          fi
           if gcloud storage ls 'gs://talkos-staging-default.firebasestorage.app/' >/dev/null 2>probe.txt; then
             echo 'STAGING_BUCKET_LIST_ALLOWED'
           else
