@@ -9,6 +9,7 @@ on:
       - 'src/**'
       - 'public/**'
       - 'index.html'
+      - 'ci/staging-debug-cert.sha256'
 concurrency:
   group: talkos-android-staging
   cancel-in-progress: true
@@ -72,6 +73,51 @@ jobs:
           ln -s "$GITHUB_WORKSPACE"/dist dist
           cp "$GITHUB_WORKSPACE"/capacitor.config.ts ./capacitor.config.ts
           node -e "const fs=require('fs'); const p=require('./package.json'); p.type='module'; fs.writeFileSync('package.json',JSON.stringify(p,null,2))"
+      # This debug key is ONLY for staging APKs. Cache it across hosted runners
+      # so subsequent downloads remain installable as updates to the same app.
+      # Never use this identity to sign a release or store production data.
+      - name: Restore consistent Android staging signing identity
+        id: staging-signing
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: talkos-staging-debug-signing-v1
+      - name: Ensure staging signer has not silently rotated
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.staging-signing.outputs.cache-hit }}" != "true" ] && [ -f ci/staging-debug-cert.sha256 ]; then
+            echo "::error::Pinned staging signing key missing from CI cache. Refusing to create another incompatible APK."
+            exit 1
+          fi
+      - name: Bootstrap staging-only debug signer
+        if: steps.staging-signing.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.android"
+          keytool -genkeypair -alias androiddebugkey -keystore "$HOME/.android/debug.keystore" \
+            -storetype JKS -storepass android -keypass android -keyalg RSA -keysize 2048 \
+            -validity 10000 -dname "CN=TalkOS STAGING ONLY, O=Talk of the Town, C=IN" -noprompt
+      - name: Verify pinned Android signer before packaging
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s "$HOME/.android/debug.keystore"
+          signer_sha="$(keytool -exportcert -alias androiddebugkey -keystore "$HOME/.android/debug.keystore" -storepass android | sha256sum | cut -d' ' -f1)"
+          echo "TalkOS staging certificate SHA256: $signer_sha"
+          if [ -f ci/staging-debug-cert.sha256 ]; then
+            test "$signer_sha" = "$(tr -d '\\r\\n ' < ci/staging-debug-cert.sha256)" || {
+              echo "::error::Staging APK signing certificate mismatch. Refusing un-installable update."
+              exit 1
+            }
+          fi
+      - name: Preserve staging key for later APK builds
+        if: steps.staging-signing.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: talkos-staging-debug-signing-v1
       - name: Generate Android project
         shell: bash
         run: |
@@ -80,12 +126,31 @@ jobs:
           ./node_modules/.bin/cap add android
           ./node_modules/.bin/cap sync android
           ./node_modules/.bin/capacitor-assets generate --android --iconBackgroundColor '#000000' --iconBackgroundColorDark '#000000' --splashBackgroundColor '#000000' --splashBackgroundColorDark '#000000'
+          # Monotonic Android versionCode also lets Android recognize updates correctly.
+          sed -i -E "s/versionCode [0-9]+/versionCode ${GITHUB_RUN_NUMBER}/" android/app/build.gradle
+          grep -E "applicationId|versionCode" android/app/build.gradle
       - name: Build debug APK alongside Capacitor dependencies
         shell: bash
         run: |
           set -euo pipefail
           cd /tmp/talkos-capacitor-tools/android
           bash ./gradlew assembleDebug --no-daemon
+      - name: Validate APK package and certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          apk="/tmp/talkos-capacitor-tools/android/app/build/outputs/apk/debug/app-debug.apk"
+          apksigner="$(find "$sdk/build-tools" -name apksigner -type f | sort -V | tail -n 1)"
+          aapt="$(find "$sdk/build-tools" -name aapt -type f | sort -V | tail -n 1)"
+          test -s "$apk" && test -x "$apksigner" && test -x "$aapt"
+          "$apksigner" verify --verbose --print-certs "$apk"
+          package="$("$aapt" dump badging "$apk" | sed -n "s/^package: name='\\([^']*\\)'.*/\\1/p" | head -1)"
+          test "$package" = "com.talkofthetown.pos" || { echo "::error::Unexpected package $package"; exit 1; }
+          actual_sha="$("$apksigner" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -1)"
+          key_sha="$(keytool -exportcert -alias androiddebugkey -keystore "$HOME/.android/debug.keystore" -storepass android | sha256sum | cut -d' ' -f1)"
+          test "$actual_sha" = "$key_sha" || { echo "::error::APK is not signed with the pinned staging identity"; exit 1; }
+          echo "Verified TalkOS package $package signed with staging certificate $actual_sha"
       - name: Publish APK artifact
         uses: actions/upload-artifact@v4
         with:
