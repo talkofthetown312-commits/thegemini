@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Read-only diagnostics. No database/rule/auth mutations, tokens or records logged."""
+"""Read-only diagnostics. No database/rule/auth mutations, tokens or records logged.
+Verify the source of the actual TalkOS APK menu permission-denied screenshot.
+"""
 import hashlib
 import json
 import os
