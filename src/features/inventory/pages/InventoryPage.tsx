@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { importMasterInventory } from '../services/importInventoryStaging';
 import { MASTER_INVENTORY } from '../data/masterInventory';
+import { MasterInventoryCatalogue } from '../components/MasterInventoryCatalogue';
 import { useInventoryStore } from '../store/inventoryStore';
-import { Loader2, Plus, Edit2, Trash2, Search, ArrowRightLeft, Package, FolderTree, Building2, AlertTriangle, LayoutDashboard, MapPin, Archive, RefreshCw, Activity } from 'lucide-react';
+import { Loader2, Plus, Edit2, Trash2, Search, ArrowRightLeft, Package, FolderTree, Building2, AlertTriangle, LayoutDashboard, MapPin, Archive, RefreshCw, Activity, BookOpen } from 'lucide-react';
 import { InventoryDashboard } from '../components/InventoryDashboard';
 
 // Placeholder imports for sub-components - we will create these next
@@ -15,14 +16,15 @@ import { CycleCounting } from '../components/CycleCounting';
 import { StockTransactions } from '../components/StockTransactions';
 import { InventoryReports } from '../components/InventoryReports';
 
-type TabType = 'DASHBOARD' | 'ITEMS' | 'CATEGORIES' | 'WAREHOUSES' | 'LOCATIONS' | 'BATCHES' | 'TRANSACTIONS' | 'CYCLE_COUNTS' | 'REPORTS';
+type TabType = 'MASTER' | 'DASHBOARD' | 'ITEMS' | 'CATEGORIES' | 'WAREHOUSES' | 'LOCATIONS' | 'BATCHES' | 'TRANSACTIONS' | 'CYCLE_COUNTS' | 'REPORTS';
 
 export function InventoryPage() {
-  const { loadInitialData, loading, error, items } = useInventoryStore();
+  const { loadInitialData, loading, error, items, itemsLoaded } = useInventoryStore();
+  const savedIds = new Set(items.map(item => item.id));
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState('');
   const importCatalogue = async () => {
-    if (!window.confirm('Import 144 inventory items at zero stock? Existing records will be skipped.')) return;
+    if (!itemsLoaded || !window.confirm('Add only missing TOT-001 through TOT-144 catalogue items to the connected staging inventory_items collection? Existing records will be retained without changes. New records start inactive with UNVERIFIED zero opening stock.')) return;
     setImporting(true);
     setImportResult('');
     try {
@@ -34,13 +36,14 @@ export function InventoryPage() {
       setImportResult('Import failed: ' + (err instanceof Error ? err.message : String(err)));
     } finally { setImporting(false); }
   };
-  const [activeTab, setActiveTab] = useState<TabType>('DASHBOARD');
+  const [activeTab, setActiveTab] = useState<TabType>('MASTER');
   
   useEffect(() => {
     loadInitialData();
   }, [loadInitialData]);
 
   const tabs = [
+    { id: 'MASTER', label: 'Master Catalogue (144)', icon: BookOpen },
     { id: 'DASHBOARD', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'ITEMS', label: 'Item Master', icon: Package },
     { id: 'CATEGORIES', label: 'Categories', icon: FolderTree },
@@ -60,17 +63,6 @@ export function InventoryPage() {
     );
   }
 
-  if (error) {
-    return (
-      <div className="p-6">
-        <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-4 rounded-lg flex items-center">
-          <AlertTriangle className="w-5 h-5 mr-2" />
-          {error}
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-900">
       <div className="p-6 pb-0 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
@@ -80,9 +72,10 @@ export function InventoryPage() {
         </div>
         
         <div className="mb-4 flex flex-wrap items-center gap-3">
-          <span className="text-sm text-slate-500">Master catalogue: {MASTER_INVENTORY.length} · Loaded: {items.length}</span>
-          <button type="button" disabled={importing} onClick={importCatalogue} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{importing ? 'Importing...' : 'Import 144 master items'}</button>
+          <span className="text-sm text-slate-500">Master catalogue: {MASTER_INVENTORY.length} · Database items: {itemsLoaded ? items.length : 'Not verified'}</span>
+          <button type="button" disabled={importing || !itemsLoaded} onClick={importCatalogue} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{importing ? 'Importing...' : 'Import 144 master items'}</button>
           {importResult && <span role="status" className="text-sm text-slate-600">{importResult}</span>}
+          <button type="button" onClick={() => { void loadInitialData(); }} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700">Refresh saved inventory</button>
         </div>
         <div className="flex space-x-1 overflow-x-auto pb-px">
           {tabs.map(tab => (
@@ -102,7 +95,14 @@ export function InventoryPage() {
         </div>
       </div>
 
+      {error && (
+        <div role="alert" className="mx-6 mt-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>Some database sections could not load: {error}. The read-only master catalogue remains available.</span>
+        </div>
+      )}
       <div className="flex-1 p-6 overflow-y-auto">
+        {activeTab === 'MASTER' && <MasterInventoryCatalogue savedIds={savedIds} itemsLoaded={itemsLoaded} />}
         {activeTab === 'DASHBOARD' && <InventoryDashboard />}
         {activeTab === 'ITEMS' && <ItemMaster />}
         {activeTab === 'CATEGORIES' && <CategoryManagement />}
