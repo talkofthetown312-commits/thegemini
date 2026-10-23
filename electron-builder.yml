@@ -1,0 +1,14 @@
+appId: com.talkofthetown.pos
+productName: TalkOS
+directories:
+  output: release
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - package.json
+extraMetadata:
+  main: dist-electron/main.cjs
+asar: true
+win:
+  target: portable
+  artifactName: TalkOS-Windows-Staging-${version}.${ext}
