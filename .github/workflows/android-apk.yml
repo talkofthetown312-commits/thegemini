@@ -52,7 +52,9 @@ jobs:
           set -euo pipefail
           echo "ANDROID_HOME=${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
           test -d "${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
-          sdkmanager 'build-tools;35.0.0'
+          if [ ! -x "$ANDROID_HOME/build-tools/35.0.0/apksigner" ]; then
+            "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'build-tools;35.0.0'
+          fi
       - name: Confirm isolated staging target
         shell: bash
         run: |
@@ -168,7 +170,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sdkmanager 'build-tools;35.0.0'
+          if [ ! -x "$ANDROID_HOME/build-tools/35.0.0/apksigner" ]; then
+            "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'build-tools;35.0.0'
+          fi
           baseline_version=$((1000 + GITHUB_RUN_NUMBER * 100 + GITHUB_RUN_ATTEMPT * 2))
           python ci/validate-android-apk.py baseline/TalkOS-STAGING.apk --version "$baseline_version" --sdk "$ANDROID_HOME" --report evidence/baseline.json
           python ci/validate-android-apk.py candidate/TalkOS-STAGING.apk --version "$((baseline_version + 1))" --sdk "$ANDROID_HOME" --report evidence/candidate.json
