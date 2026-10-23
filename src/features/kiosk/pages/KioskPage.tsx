@@ -9,7 +9,6 @@ import {
 import QRCode from 'qrcode';
 import { posService } from '../../pos/services/posService';
 import { Product, OrderItem } from '../../pos/models/pos';
-import { INITIAL_MENU_ITEMS } from '../../pos/data/menuData';
 
 type KioskStep = 'ATTRACT' | 'DINING_OPTION' | 'CATALOG' | 'PAYMENT' | 'SUCCESS';
 
@@ -55,14 +54,10 @@ export function KioskPage() {
       try {
         setLoading(true);
         const data = await posService.getProducts();
-        if (data && data.length > 0) {
-          setProducts(data.filter(p => p.active !== false && p.isAvailable !== false && !p.isSubItem));
-        } else {
-          setProducts(INITIAL_MENU_ITEMS.filter(p => p.active !== false && p.isAvailable !== false && !p.isSubItem));
-        }
+        setProducts(data.filter(p => p.active !== false && p.isAvailable !== false && !p.isSubItem));
       } catch (err) {
         console.error('Kiosk menu fetch error:', err);
-        setProducts(INITIAL_MENU_ITEMS.filter(p => p.active !== false && p.isAvailable !== false && !p.isSubItem));
+        setProducts([]);
       } finally {
         setLoading(false);
       }
@@ -176,67 +171,47 @@ export function KioskPage() {
   // Generate UPI QR code when UPI payment selected
   useEffect(() => {
     if (step === 'PAYMENT' && paymentMethod === 'UPI') {
-      const upiString = `upi://pay?pa=talkosbistro@upi&pn=TalkOS%20Bistro&am=${grandTotal}&cu=INR&tn=Kiosk%20Order`;
-      QRCode.toDataURL(upiString, { width: 260, margin: 2 }).then(setUpiQrUrl).catch(console.error);
+      // No unverified merchant UPI ID is embedded in the application.
+      setUpiQrUrl('');
     }
   }, [step, paymentMethod, grandTotal]);
 
+  // Guest checkout must be acknowledged by a real backend, never a simulated payment.
   const handleProcessKioskPayment = async () => {
+    if (cart.length === 0) return;
     setPaymentStatus('PROCESSING');
-
-    // Simulate EMV terminal communication or QR verification
-    setTimeout(async () => {
-      try {
-        const res = await fetch('/api/orders/guest-checkout', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            items: cart,
-            orderType: diningOption,
-            tableNumber: diningOption === 'DINE_IN' ? (tableNumber || buzzerTentNumber || 'Table 1') : undefined,
-            kioskId: 'KIOSK-01',
-            paymentMethod,
-            paymentDetails: {
-              method: paymentMethod,
-              terminalId: 'KIOSK-POS-A1',
-              timestamp: new Date().toISOString()
-            }
-          })
-        });
-
-        const data = await res.json();
-        setCompletedOrder({
-          orderId: data.orderId || `ord_${Date.now()}`,
-          orderNumber: data.orderNumber || `ORD-K-${Math.floor(1000 + Math.random() * 9000)}`,
-          buzzerNumber: data.buzzerNumber || `K-${Math.floor(10 + Math.random() * 89)}`,
-          total: grandTotal
-        });
-        setPaymentStatus('COMPLETED');
-        setStep('SUCCESS');
-      } catch (err) {
-        console.error('Kiosk order submission fallback:', err);
-        // Fallback local order
-        const localOrder = await posService.createOrder({
-          orderType: diningOption,
-          tableNumber: tableNumber || buzzerTentNumber || 'Kiosk',
-          customerName: 'Kiosk Guest',
+    try {
+      const res = await fetch('/api/orders/guest-checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           items: cart,
-          subtotal: cartTotal,
-          tax: taxAmount,
-          total: grandTotal,
-          paymentMethod,
-          status: paymentMethod === 'CASH' ? 'PENDING' : 'PAID'
-        });
-        setCompletedOrder({
-          orderId: localOrder.id,
-          orderNumber: localOrder.orderNumber,
-          buzzerNumber: `K-${Math.floor(10 + Math.random() * 89)}`,
-          total: grandTotal
-        });
-        setPaymentStatus('COMPLETED');
-        setStep('SUCCESS');
+          orderType: diningOption,
+          tableNumber: diningOption === 'DINE_IN' ? (tableNumber || buzzerTentNumber || undefined) : undefined,
+          paymentMethod
+        })
+      });
+      if (!res.ok || !res.headers.get('content-type')?.includes('application/json')) {
+        throw new Error('Guest checkout service unavailable');
       }
-    }, 1200);
+      const data = await res.json();
+      if (!data.success || !data.orderId || !data.orderNumber ||
+          (paymentMethod !== 'CASH' && data.paymentVerified !== true)) {
+        throw new Error('Order or digital payment has not been verified');
+      }
+      setCompletedOrder({
+        orderId: data.orderId,
+        orderNumber: data.orderNumber,
+        buzzerNumber: data.buzzerNumber || '',
+        total: grandTotal
+      });
+      setPaymentStatus('COMPLETED');
+      setStep('SUCCESS');
+    } catch (error) {
+      console.error('Verified kiosk checkout unavailable', error);
+      setPaymentStatus('IDLE');
+      alert('Self-order checkout is not available. Please place your order at the counter; no payment or order has been recorded.');
+    }
   };
 
   // 1. ATTRACT MODE (Idle Screensaver)
