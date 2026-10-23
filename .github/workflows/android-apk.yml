@@ -107,7 +107,7 @@ jobs:
           signer_sha="$(keytool -exportcert -alias androiddebugkey -keystore "$HOME/.android/debug.keystore" -storepass android | sha256sum | cut -d' ' -f1)"
           echo "TalkOS staging certificate SHA256: $signer_sha"
           if [ -f ci/staging-debug-cert.sha256 ]; then
-            test "$signer_sha" = "$(tr -d '\\r\\n ' < ci/staging-debug-cert.sha256)" || {
+            test "$signer_sha" = "$(head -c 64 ci/staging-debug-cert.sha256)" || {
               echo "::error::Staging APK signing certificate mismatch. Refusing un-installable update."
               exit 1
             }
@@ -145,7 +145,7 @@ jobs:
           aapt="$(find "$sdk/build-tools" -name aapt -type f | sort -V | tail -n 1)"
           test -s "$apk" && test -x "$apksigner" && test -x "$aapt"
           "$apksigner" verify --verbose --print-certs "$apk"
-          package="$("$aapt" dump badging "$apk" | sed -n "s/^package: name='\\([^']*\\)'.*/\\1/p" | head -1)"
+          package="$("$aapt" dump badging "$apk" | head -n 1 | cut -d "'" -f 2)"
           test "$package" = "com.talkofthetown.pos" || { echo "::error::Unexpected package $package"; exit 1; }
           actual_sha="$("$apksigner" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -1)"
           key_sha="$(keytool -exportcert -alias androiddebugkey -keystore "$HOME/.android/debug.keystore" -storepass android | sha256sum | cut -d' ' -f1)"
