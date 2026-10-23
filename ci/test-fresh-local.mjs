@@ -50,10 +50,10 @@ try {
   await assert(page.getByText('New order'), 'POS screen');
   const veg = page.locator('div.rounded-2xl').filter({ has: page.getByRole('heading', { name: 'Veg Chowmein' }) }).first();
   await veg.getByRole('button', { name: /Small:/ }).click();
-  await assert(page.getByText('Cart'), 'order cart');
+  await assert(page.getByRole('heading', { name: 'Cart', exact: true }), 'order cart');
   await page.getByRole('button', { name: 'Save order & kitchen ticket' }).click();
   await assert(page.getByText('Kitchen order tickets'), 'kitchen display');
-  await assert(page.getByText('TOT-00001'), 'first real order');
+  await assert(page.getByText('TOT-00001', { exact: true }), 'first real order');
   await page.getByRole('button', { name: 'Mark PREPARING' }).click();
   await assert(page.getByRole('button', { name: 'Mark READY' }), 'valid kitchen transition');
 
