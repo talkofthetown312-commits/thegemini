@@ -9,6 +9,10 @@ on:
       - 'src/**'
       - 'public/**'
       - 'index.html'
+concurrency:
+  group: talkos-android-staging
+  cancel-in-progress: true
+
 permissions:
   contents: read
 jobs:
