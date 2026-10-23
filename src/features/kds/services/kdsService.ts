@@ -5,13 +5,7 @@ import { transitionTicketItem } from './ticketTransitions';
 
 class KdsService {
   async getStations(): Promise<Station[]> {
-    if (!db) {
-      return [
-        { id: 'st_1', name: 'Grill Station', type: 'KITCHEN', isActive: true },
-        { id: 'st_2', name: 'Salad Station', type: 'KITCHEN', isActive: true },
-        { id: 'st_3', name: 'Drink Station', type: 'BAR', isActive: true }
-      ];
-    }
+    if (!db) throw new Error('Kitchen stations unavailable: database not configured');
     const q = query(collection(db, 'stations'));
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Station));
