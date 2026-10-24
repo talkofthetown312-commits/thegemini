@@ -1,34 +1,46 @@
-import { App, initializeApp, cert, applicationDefault } from 'firebase-admin/app';
+import { App, initializeApp, getApps, applicationDefault } from 'firebase-admin/app';
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
-import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
+import { initializeFirestore, Firestore } from 'firebase-admin/firestore';
 import dotenv from 'dotenv';
 
-dotenv.config();
+dotenv.config({ quiet: true });
 
 let adminApp: App | null = null;
+let firestoreInstance: Firestore | null = null;
 
-export function getFirebaseAdmin(): App {
+export function getFirebaseAdmin(): App | null {
   if (!adminApp) {
     try {
-      adminApp = initializeApp({
-        credential: applicationDefault()
-      });
-      console.log("Firebase Admin SDK initialized successfully.");
+      const existing = getApps();
+      if (existing.length > 0) {
+        adminApp = existing[0];
+      } else {
+        adminApp = initializeApp({
+          credential: applicationDefault()
+        });
+      }
     } catch (error) {
-      console.error("Error initializing Firebase Admin:", error);
+      console.warn("Firebase Admin initialization skipped:", error);
+      return null;
     }
   }
-  return adminApp!;
+  return adminApp;
 }
 
 export function getAdminAuthService() {
   const app = getFirebaseAdmin();
+  if (!app) throw new Error("Firebase Admin not available");
   return getAdminAuth(app);
 }
 
-export function getAdminFirestoreService() {
+export function getAdminFirestoreService(): Firestore | null {
+  if (firestoreInstance) return firestoreInstance;
   const app = getFirebaseAdmin();
-  return getAdminFirestore(app);
+  if (!app) return null;
+  try {
+    firestoreInstance = initializeFirestore(app, { preferRest: true });
+    return firestoreInstance;
+  } catch {
+    return null;
+  }
 }
-
-

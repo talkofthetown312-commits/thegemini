@@ -7,8 +7,16 @@ import { getAdminAuthService, getAdminFirestoreService } from "./src/core/fireba
 import { INITIAL_MENU_ITEMS, getAllMenuItemSizes } from "./src/features/pos/data/menuData.js";
 import { GoogleGenAI } from "@google/genai";
 
-// Load environment variables
-dotenv.config();
+// Load environment variables quietly
+dotenv.config({ quiet: true });
+
+// Prevent unhandled background rejections (e.g., gRPC or network timeouts) from terminating the dev server
+process.on("uncaughtException", (err) => {
+  console.warn("[Process Uncaught Exception]:", err?.message || err);
+});
+process.on("unhandledRejection", (reason: any) => {
+  console.warn("[Process Unhandled Rejection]:", reason?.message || reason);
+});
 
 async function startServer() {
   const app = express();
@@ -49,9 +57,12 @@ async function startServer() {
       console.log(`User logged in from Android: ${decodedToken.uid}`);
       
       // Optionally fetch user profile from Firestore
+      let userData = null;
       const adminDb = getAdminFirestoreService();
-      const userDoc = await adminDb.collection('users').doc(decodedToken.uid).get();
-      const userData = userDoc.exists ? userDoc.data() : null;
+      if (adminDb) {
+        const userDoc = await adminDb.collection('users').doc(decodedToken.uid).get();
+        userData = userDoc.exists ? userDoc.data() : null;
+      }
 
       res.json({
         status: "success",
