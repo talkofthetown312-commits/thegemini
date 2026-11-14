@@ -1,0 +1,57 @@
+name: TalkOS Firebase Hosting (manual production)
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type DEPLOY to confirm production Hosting release'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: talkos-firebase-production
+  cancel-in-progress: false
+
+jobs:
+  deploy-hosting:
+    if: ${{ github.ref == 'refs/heads/main' && inputs.confirmation == 'DEPLOY' }}
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Validate deployment credential
+        env:
+          CREDENTIALS: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$CREDENTIALS" ]; then
+            echo "::error::Missing FIREBASE_SERVICE_ACCOUNT in repository or production environment secrets"
+            exit 1
+          fi
+      - run: npm ci --no-audit --no-fund
+      - run: npm run lint
+      - run: npm run test
+      - name: Build Firebase Hosting SPA only
+        run: npm run build:pwa
+        env:
+          VITE_FIREBASE_PROJECT_ID: gen-lang-client-0658820145
+          VITE_FIREBASE_DATABASE_ID: ai-studio-talkosarchitectu-438c4707-59bb-4b28-aa84-26b8ca15c574
+          VITE_FIREBASE_API_KEY: AIzaSyAiEvJ-FjaiwpLWFpGvf7lLq9TwbiDbxr0
+          VITE_FIREBASE_AUTH_DOMAIN: gen-lang-client-0658820145.firebaseapp.com
+          VITE_FIREBASE_STORAGE_BUCKET: gen-lang-client-0658820145.firebasestorage.app
+          VITE_FIREBASE_MESSAGING_SENDER_ID: '370265579918'
+          VITE_FIREBASE_APP_ID: '1:370265579918:web:1a0ed13858bdb2939d44df'
+      - name: Authenticate Firebase deploy identity
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      - name: Deploy Hosting only (no Firestore or Storage rule changes)
+        env:
+          PROJECT_ID: gen-lang-client-0658820145
+        run: npx --yes firebase-tools@14 deploy --only hosting --project "$PROJECT_ID" --non-interactive

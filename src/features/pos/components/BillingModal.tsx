@@ -94,7 +94,7 @@ export function BillingModal({
   
   // UPI payment state
   const [upiRef, setUpiRef] = useState<string>('');
-  const [copiedUpi, setCopiedUpi] = useState(false);
+  const [paymentConfirmed, setPaymentConfirmed] = useState(false);
 
   // Card payment state
   const [cardType, setCardType] = useState<'Visa' | 'MasterCard' | 'RuPay'>('RuPay');
@@ -125,15 +125,19 @@ export function BillingModal({
     }
   };
 
-  const handleCopyUpi = () => {
-    navigator.clipboard?.writeText('talkofthetown312@okaxis');
-    setCopiedUpi(true);
-    setTimeout(() => setCopiedUpi(false), 2000);
-  };
 
   const handleSettleOrder = async () => {
     setErrorMessage(null);
 
+    // Manual cashier confirmation: no gateway integration is assumed.
+    if (activePaymentMethod !== 'CASH' && !paymentConfirmed) {
+      setErrorMessage('Confirm the payment on your UPI app or card terminal before marking this order paid.');
+      return;
+    }
+    if (activePaymentMethod === 'UPI' && !upiRef.trim()) {
+      setErrorMessage('Enter the actual UPI transaction reference.');
+      return;
+    }
     // Validation
     if (activePaymentMethod === 'CASH') {
       if (tenderedNum < grandTotal) {
@@ -163,13 +167,13 @@ export function BillingModal({
       } else if (activePaymentMethod === 'UPI') {
         details = {
           method: 'UPI',
-          upiReference: upiRef.trim() || `UPI-${Date.now().toString().slice(-6)}`
+          upiReference: upiRef.trim()
         };
       } else if (activePaymentMethod === 'CARD') {
         details = {
           method: 'CARD',
           cardType,
-          cardLast4: cardLast4.trim() || '••••'
+          cardLast4: cardLast4.trim() || undefined
         };
       } else {
         // SPLIT
@@ -527,6 +531,13 @@ export function BillingModal({
                 </button>
               </div>
 
+              {activePaymentMethod !== 'CASH' && (
+                <label className="flex items-start gap-2 mb-4 text-xs font-bold text-[#800000]">
+                  <input type="checkbox" checked={paymentConfirmed} onChange={e => setPaymentConfirmed(e.target.checked)} />
+                  I have verified receipt of this payment outside TalkOS (bank, UPI app or card terminal).
+                </label>
+              )}
+
               {/* Method Specific UI */}
 
               {/* 1. CASH PAYMENT */}
@@ -621,40 +632,14 @@ export function BillingModal({
                 <div className="space-y-4">
                   <div className="p-4 rounded-xl border border-[#ebd5da] bg-[#fdf5f6] flex flex-col items-center text-center">
                     {/* QR Code Graphic */}
-                    <div className="w-36 h-36 bg-white p-2.5 rounded-xl border border-[#ebd5da] shadow-xs flex flex-col items-center justify-center relative mb-3">
-                      <QrCode className="w-28 h-28 text-[#800000]" />
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="bg-[#800000] text-white p-1 rounded font-black text-[9px]">
-                          TOTT
-                        </div>
-                      </div>
-                    </div>
-
-                    <p className="text-xs font-black text-[#800000]">
-                      Scan with any UPI App (GPay / PhonePe / Paytm)
-                    </p>
-                    <p className="text-base font-black text-[#800000] mt-1">
-                      Amount: ₹{grandTotal.toFixed(2)}
-                    </p>
-
-                    <div className="mt-3 flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-[#ebd5da]">
-                      <span className="text-xs font-mono font-bold text-[#800000]">
-                        talkofthetown312@okaxis
-                      </span>
-                      <button
-                        type="button"
-                        onClick={handleCopyUpi}
-                        className="text-xs font-black text-[#800000] hover:underline flex items-center gap-1 cursor-pointer"
-                      >
-                        {copiedUpi ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                        {copiedUpi ? 'Copied' : 'Copy'}
-                      </button>
-                    </div>
+                    <p className="text-sm font-bold text-[#800000]">Collect payment using your restaurant's own configured UPI account or QR display.</p>
+                    <p className="text-xs text-[#800000]">Check the payment receipt in your bank or UPI app. This screen does not generate a payment QR or verify bank settlement.</p>
+                    <p className="text-base font-black text-[#800000] mt-1">Amount: ₹{grandTotal.toFixed(2)}</p>
                   </div>
 
                   <div>
                     <label className="block text-xs font-bold text-[#800000] mb-1">
-                      Transaction UTR / Reference (Optional)
+                      Transaction UTR / Reference (Required)
                     </label>
                     <input
                       type="text"

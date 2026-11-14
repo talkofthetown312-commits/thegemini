@@ -1,0 +1,266 @@
+name: TalkOS Android Staging APK
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/android-apk.yml'
+      - 'assets/icon.png'
+      - 'src/**'
+      - 'public/**'
+      - 'index.html'
+      - 'ci/**'
+      - 'capacitor.config.ts'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vite.config.ts'
+concurrency:
+  group: talkos-android-staging
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  actions: read
+jobs:
+  android-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      max-parallel: 1
+      matrix:
+        build: [baseline, candidate]
+    env:
+      TALKOS_NATIVE_ANDROID: '1'
+      VITE_FIREBASE_API_KEY: ${{ vars.TALKOS_TEST_FIREBASE_API_KEY }}
+      VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.TALKOS_TEST_FIREBASE_AUTH_DOMAIN }}
+      VITE_FIREBASE_PROJECT_ID: ${{ vars.TALKOS_TEST_FIREBASE_PROJECT_ID }}
+      VITE_FIREBASE_DATABASE_ID: ${{ vars.TALKOS_TEST_FIREBASE_DATABASE_ID }}
+      VITE_FIREBASE_STORAGE_BUCKET: ${{ vars.TALKOS_TEST_FIREBASE_STORAGE_BUCKET }}
+      VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.TALKOS_TEST_FIREBASE_MESSAGING_SENDER_ID }}
+      VITE_FIREBASE_APP_ID: ${{ vars.TALKOS_TEST_FIREBASE_APP_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Use preinstalled Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "ANDROID_HOME=${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          test -d "${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          if [ ! -x "$ANDROID_HOME/build-tools/35.0.0/apksigner" ]; then
+            "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'build-tools;35.0.0'
+          fi
+      - name: Confirm isolated staging target
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$VITE_FIREBASE_PROJECT_ID" = "talkos-staging-default"
+          test "$VITE_FIREBASE_DATABASE_ID" = "(default)"
+          test "$VITE_FIREBASE_MESSAGING_SENDER_ID" = "93376253053"
+          for key in VITE_FIREBASE_API_KEY VITE_FIREBASE_AUTH_DOMAIN VITE_FIREBASE_STORAGE_BUCKET VITE_FIREBASE_APP_ID; do
+            test -n "${!key:-}" || { echo "::error::Missing $key"; exit 1; }
+          done
+      - run: npm ci --no-audit --no-fund
+      - run: npm run lint
+      - run: npm test
+      - name: Check touch navigation and small-screen layout
+        if: matrix.build == 'candidate'
+        run: |
+          npx playwright install --with-deps chromium
+          npm run test:mobile-ui
+          node ci/test-android-cache-migration.mjs
+      - name: Preserve responsive UI test evidence
+        if: always() && matrix.build == 'candidate'
+        uses: actions/upload-artifact@v4
+        with:
+          name: TalkOS-mobile-ui-${{ github.run_attempt }}
+          path: ui-evidence/
+          if-no-files-found: ignore
+          retention-days: 7
+      - run: npm run build:pwa
+      - name: Retire web caches left by older Android APKs
+        run: cp ci/android-sw-retire.js dist/sw.js
+      - name: Install Capacitor in isolated tooling directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/talkos-capacitor-tools
+          cd /tmp/talkos-capacitor-tools
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund --save-exact @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 typescript@5 @capacitor/assets@3 sharp@0.34
+          mkdir -p assets
+          cp "$GITHUB_WORKSPACE/assets/icon.png" assets/icon.png
+          node -e "const sharp=require('sharp'),fs=require('fs');sharp('assets/icon.png').resize(1024,1024).toBuffer().then(data=>fs.writeFileSync('assets/icon.png',data)).catch(e=>{console.error(e);process.exit(1)})"
+          ln -s "$GITHUB_WORKSPACE"/dist dist
+          cp "$GITHUB_WORKSPACE"/capacitor.config.ts ./capacitor.config.ts
+          node -e "const fs=require('fs'); const p=require('./package.json'); p.type='module'; fs.writeFileSync('package.json',JSON.stringify(p,null,2))"
+      # This debug key is ONLY for staging APKs. Cache it across hosted runners
+      # so subsequent downloads remain installable as updates to the same app.
+      # Never use this identity to sign a release or store production data.
+      - name: Restore consistent Android staging signing identity
+        id: staging-signing
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: talkos-staging-debug-signing-v1
+      - name: Require and pin the retained staging signing key
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ steps.staging-signing.outputs.cache-hit }}" = true || {
+            echo "::error::Retained staging keystore missing. Refusing to generate an incompatible identity."
+            exit 1
+          }
+          test -s "$HOME/.android/debug.keystore"
+          signer_sha="$(keytool -exportcert -alias androiddebugkey -keystore "$HOME/.android/debug.keystore" -storepass android | sha256sum | cut -d' ' -f1)"
+          test "$signer_sha" = "$(cat ci/staging-debug-cert.sha256)"
+          echo "Retained staging certificate: $signer_sha"
+          echo "TALKOS_STAGING_KEYSTORE=$HOME/.android/debug.keystore" >> "$GITHUB_ENV"
+      - name: Allocate increasing versions for independent builds
+        shell: bash
+        env:
+          BUILD_KIND: ${{ matrix.build }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_RUN_ATTEMPT" -lt 50
+          version=$((1000 + GITHUB_RUN_NUMBER * 100 + GITHUB_RUN_ATTEMPT * 2))
+          if [ "$BUILD_KIND" = candidate ]; then version=$((version + 1)); fi
+          echo "TALKOS_VERSION_CODE=$version" >> "$GITHUB_ENV"
+      - name: Generate Android project
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd /tmp/talkos-capacitor-tools
+          ./node_modules/.bin/cap add android
+          ./node_modules/.bin/cap sync android
+          ./node_modules/.bin/capacitor-assets generate --android --iconBackgroundColor '#000000' --iconBackgroundColorDark '#000000' --splashBackgroundColor '#000000' --splashBackgroundColorDark '#000000'
+          cp "$GITHUB_WORKSPACE/ci/android-staging.gradle" android/app/talkos-staging.gradle
+          printf '\napply from: "talkos-staging.gradle"\n' >> android/app/build.gradle
+      - name: Build APK with the explicit retained signer
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd /tmp/talkos-capacitor-tools/android
+          bash ./gradlew assembleDebug --no-daemon -PtalkosVersionCode="$TALKOS_VERSION_CODE"
+      - name: Validate the actual APK with Android SDK tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          python ci/test-apk-validation.py
+          mkdir -p apk-output
+          cp /tmp/talkos-capacitor-tools/android/app/build/outputs/apk/debug/app-debug.apk apk-output/TalkOS-STAGING.apk
+          python ci/validate-android-apk.py apk-output/TalkOS-STAGING.apk \
+            --version "$TALKOS_VERSION_CODE" --sdk "$ANDROID_HOME" --report apk-output/validation.json
+      - name: Retain independent build for upgrade testing
+        uses: actions/upload-artifact@v4
+        with:
+          name: TalkOS-APK-${{ matrix.build }}-${{ github.run_attempt }}
+          path: apk-output/
+          if-no-files-found: error
+          retention-days: 7
+
+  install-and-upgrade:
+    needs: android-apk
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/download-artifact@v4
+        with:
+          name: TalkOS-APK-baseline-${{ github.run_attempt }}
+          path: baseline
+      - uses: actions/download-artifact@v4
+        with:
+          name: TalkOS-APK-candidate-${{ github.run_attempt }}
+          path: candidate
+      - name: Find oldest retained validated APK for compatibility testing
+        id: prior-apk
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const runs = await github.rest.actions.listWorkflowRuns({
+              ...context.repo, workflow_id: 'android-apk.yml', status: 'success', per_page: 100
+            });
+            const older = runs.data.workflow_runs
+              .filter(run => run.run_number < Number(process.env.GITHUB_RUN_NUMBER))
+              .sort((a, b) => a.run_number - b.run_number);
+            for (const run of older) {
+              const artifacts = await github.rest.actions.listWorkflowRunArtifacts({ ...context.repo, run_id: run.id });
+              const artifact = artifacts.data.artifacts.find(a => !a.expired && a.name.startsWith('TalkOS-Android-STAGING-validated-'));
+              if (artifact) {
+                core.setOutput('run-id', String(run.id));
+                core.setOutput('name', artifact.name);
+                core.info(`Testing upgrade from validated run ${run.id}`);
+                break;
+              }
+            }
+      - uses: actions/download-artifact@v4
+        if: steps.prior-apk.outputs.run-id != ''
+        with:
+          name: ${{ steps.prior-apk.outputs.name }}
+          run-id: ${{ steps.prior-apk.outputs.run-id }}
+          github-token: ${{ github.token }}
+          path: previous
+      - name: Verify both independently built APKs again
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -x "$ANDROID_HOME/build-tools/35.0.0/apksigner" ]; then
+            "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'build-tools;35.0.0'
+          fi
+          baseline_version=$((1000 + GITHUB_RUN_NUMBER * 100 + GITHUB_RUN_ATTEMPT * 2))
+          python ci/validate-android-apk.py baseline/TalkOS-STAGING.apk --version "$baseline_version" --sdk "$ANDROID_HOME" --report evidence/baseline.json
+          python ci/validate-android-apk.py candidate/TalkOS-STAGING.apk --version "$((baseline_version + 1))" --sdk "$ANDROID_HOME" --report evidence/candidate.json
+          if [ -f previous/TalkOS-STAGING.apk ]; then
+            previous_version="$(python -c 'import json; print(json.load(open("previous/candidate.json"))["versionCode"])')"
+            test "$previous_version" -lt "$baseline_version"
+            python ci/validate-android-apk.py previous/TalkOS-STAGING.apk --version "$previous_version" --sdk "$ANDROID_HOME" --report evidence/previous.json
+          fi
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Test fresh installation and data-preserving upgrade on Android 16
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          target: google_apis
+          arch: x86_64
+          profile: pixel_7_pro
+          disable-animations: true
+          script: bash ci/test-android-upgrade.sh baseline/TalkOS-STAGING.apk candidate/TalkOS-STAGING.apk evidence previous/TalkOS-STAGING.apk
+      - name: Confirm installed version
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected=$((1000 + GITHUB_RUN_NUMBER * 100 + GITHUB_RUN_ATTEMPT * 2 + 1))
+          grep -Eq "versionCode=$expected( |$)" evidence/installed-package.txt
+          cp candidate/TalkOS-STAGING.apk evidence/TalkOS-STAGING.apk
+          sha256sum evidence/TalkOS-STAGING.apk > evidence/APK-SHA256.txt
+          cat evidence/install-upgrade.txt >> "$GITHUB_STEP_SUMMARY"
+      - name: Publish validated installable APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: TalkOS-Android-STAGING-validated-${{ github.run_attempt }}
+          path: evidence/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Preserve test evidence on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TalkOS-Android-test-evidence-${{ github.run_attempt }}
+          path: evidence/
+          retention-days: 7

@@ -6,13 +6,14 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig(() => {
   return {
+    base: process.env.TALKOS_NATIVE_ANDROID === '1' ? './' : '/',
     plugins: [
       react(), 
       tailwindcss(),
-      VitePWA({
+      ...(process.env.TALKOS_NATIVE_ANDROID === '1' ? [] : [VitePWA({
         registerType: 'autoUpdate',
         devOptions: {
-          enabled: true,
+          enabled: false,
         },
         workbox: {
           maximumFileSizeToCacheInBytes: 5000000,
@@ -50,7 +51,7 @@ export default defineConfig(() => {
             },
           ],
         },
-      }),
+      })]),
     ],
     resolve: {
       alias: {

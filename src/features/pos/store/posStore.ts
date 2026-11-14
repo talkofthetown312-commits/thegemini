@@ -11,6 +11,7 @@ import {
   ParkedOrder 
 } from '../models/pos';
 import { posService } from '../services/posService';
+import { validateCheckout } from '../services/checkoutValidation';
 import { inventoryService } from '../../inventory/services/inventoryService';
 import { manufacturingService } from '../../manufacturing/services/manufacturingService';
 import { kdsService } from '../../kds/services/kdsService';
@@ -20,6 +21,8 @@ interface PosState {
   cart: OrderItem[];
   loading: boolean;
   error: string | null;
+  menuError: string | null;
+  ordersError: string | null;
   lastCompletedOrder: Order | null;
   
   // Active Order Context
@@ -79,6 +82,8 @@ export const usePosStore = create<PosState>((set, get) => ({
   cart: [],
   loading: false,
   error: null,
+  menuError: null,
+  ordersError: null,
   lastCompletedOrder: null,
 
   orderType: 'DINE_IN',
@@ -101,12 +106,14 @@ export const usePosStore = create<PosState>((set, get) => ({
   removeDiscount: () => set({ discount: null }),
 
   loadProducts: async () => {
-    set({ loading: true, error: null });
+    set({ loading: true, menuError: null });
     try {
       const products = await posService.getProducts();
       set({ products, loading: false });
     } catch (err: any) {
-      set({ error: err.message, loading: false });
+      set({ menuError: err.code === 'permission-denied'
+        ? 'Your account is signed in, but access to the restaurant menu was denied. Saved menu items could not be checked.'
+        : 'Could not load the saved menu: ' + err.message, loading: false });
     }
   },
 
@@ -287,6 +294,9 @@ export const usePosStore = create<PosState>((set, get) => ({
   },
 
   completeCheckout: async ({ method, details }) => {
+    // Lock synchronously before any await. Rapid taps or keyboard shortcuts must
+    // not create multiple paid orders from the same cart.
+    if (get().loading) throw new Error('Checkout is already processing. Please wait.');
     const { cart, orderType, tableNumber, customerName, customerPhone, orderNotes, discount } = get();
     if (cart.length === 0) throw new Error("Cannot checkout empty cart");
 
@@ -313,6 +323,8 @@ export const usePosStore = create<PosState>((set, get) => ({
       const tax = cgst + sgst;
       const total = Math.round((discountedSubtotal + tax) * 100) / 100;
 
+      validateCheckout(cart, method, details, total);
+
       const order = await posService.createOrder({
         items: cart,
         orderType,
@@ -336,20 +348,23 @@ export const usePosStore = create<PosState>((set, get) => ({
         status: 'PAID'
       });
 
-      // 1. Inventory Deduction
-      for (const item of cart) {
+      // 1. Inventory Deduction. Paid sale remains recorded even if stock fails.
+      const stockWarnings: string[] = [];
+      for (const [cartIndex, item] of cart.entries()) {
         if (item.recipeId) {
           try {
             const recipes = await manufacturingService.getRecipes();
             const recipe = recipes.find(r => r.id === item.recipeId);
+            if (!recipe) stockWarnings.push(`${item.name}: recipe missing`);
             if (recipe) {
               const baseYield = recipe.yieldQuantity || 1;
               const ratio = item.quantity / baseYield;
               
-              for (const ing of recipe.ingredients) {
+              for (const [ingredientIndex, ing] of recipe.ingredients.entries()) {
                 if (ing.inventoryItemId) {
                   const qtyToDeduct = ing.quantity * ratio;
                   await inventoryService.recordTransaction({
+                    idempotencyKey: `sale_${order.id}_${cartIndex}_${ingredientIndex}`,
                     itemId: ing.inventoryItemId,
                     type: 'STOCK_OUT',
                     quantity: qtyToDeduct,
@@ -358,49 +373,60 @@ export const usePosStore = create<PosState>((set, get) => ({
                     unitCost: ing.costPerUnit || 0,
                     totalCost: (ing.costPerUnit || 0) * qtyToDeduct,
                     performedBy: 'System'
-                  }).catch(e => console.error('Error recording POS inventory deduction', e));
+                  }).catch(e => { console.error('Error recording POS inventory deduction', e); stockWarnings.push(`${item.name}: ${ing.itemName || ing.inventoryItemId}`); });
                 }
               }
             }
           } catch (recipeError) {
+             stockWarnings.push(`${item.name}: recipe lookup failed`);
              console.error('Error fetching recipe for POS deduction', recipeError);
           }
         }
 
-        // Combo Items: deduct stock for linked components
+        // Combo stock must be deducted from ingredient BOMs, not product IDs.
+        // If a recipe is missing, flag it for setup rather than writing invalid
+        // inventory transactions against the POS product collection.
         if (item.isCombo && item.comboComponents) {
-          for (const comp of item.comboComponents) {
-            let componentNameToDeduct = comp.name;
-            let componentItemId = comp.itemId;
-
-            if (comp.isChoice && item.selectedOption && comp.options) {
-              const selectedOpt = comp.options.find(o => o.name === item.selectedOption);
-              if (selectedOpt) {
-                componentNameToDeduct = selectedOpt.name;
-                componentItemId = selectedOpt.itemId;
-              }
+          const recipes = await manufacturingService.getRecipes().catch(() => { stockWarnings.push(`${item.name}: combo recipes unavailable`); return []; });
+          const menuProducts = get().products;
+          for (const [componentIndex, comp] of item.comboComponents.entries()) {
+            const selected = comp.isChoice && item.selectedOption
+              ? comp.options?.find(o => o.name === item.selectedOption)
+              : undefined;
+            const productId = selected?.itemId || comp.itemId;
+            const componentSize = selected?.size || comp.size || 'Standard';
+            const product = menuProducts.find(p => p.id === productId);
+            const recipe = recipes.find(r => r.id === product?.recipeId);
+            if (!recipe) {
+              stockWarnings.push(`${item.name}: combo component recipe missing (${productId})`);
+              console.warn('Combo component recipe missing; inventory not deducted:', productId);
+              continue;
             }
-
-            try {
-              const componentQty = (comp.quantity || 1) * item.quantity;
+            const portionScale = componentSize === 'Small' ? 0.35 :
+              componentSize === 'Medium' ? 0.60 : 1;
+            const units = (comp.quantity || 1) * item.quantity;
+            const yieldQty = recipe.yieldQuantity || 1;
+            for (const [ingredientIndex, ingredient] of recipe.ingredients.entries()) {
+              if (!ingredient.inventoryItemId) continue;
+              const qty = ingredient.quantity * units * portionScale / yieldQty;
               await inventoryService.recordTransaction({
-                itemId: componentItemId,
+                idempotencyKey: `combo_${order.id}_${cartIndex}_${componentIndex}_${ingredientIndex}`,
+                itemId: ingredient.inventoryItemId,
                 type: 'STOCK_OUT',
-                quantity: componentQty,
+                quantity: qty,
                 referenceId: order.id,
-                notes: `POS Combo Sale (${order.orderNumber}): ${item.name} -> Component: ${componentNameToDeduct}`,
-                unitCost: item.unitCost ? item.unitCost / 2 : 0,
-                totalCost: 0,
+                notes: `POS Combo (${order.orderNumber}): ${product?.name || productId} ${componentSize}`,
+                unitCost: ingredient.costPerUnit || 0,
+                totalCost: (ingredient.costPerUnit || 0) * qty,
                 performedBy: 'System'
-              }).catch(e => console.error('Error deducting combo component stock:', e));
-            } catch (err) {
-              console.warn('Combo inventory deduction notice:', err);
+              }).catch(e => { console.error('Combo ingredient deduction failed:', e); stockWarnings.push(`${item.name}: ${ingredient.itemName || ingredient.inventoryItemId}`); });
             }
           }
         }
       }
 
       // 2. Push to KDS Ticket
+      let kitchenWarning: string | null = null;
       try {
         await kdsService.createTicket({
           orderId: order.id,
@@ -429,7 +455,8 @@ export const usePosStore = create<PosState>((set, get) => ({
           }))
         });
       } catch (kdsErr) {
-        console.warn('Could not push order to KDS:', kdsErr);
+        console.error('Paid order needs manual kitchen attention:', order.orderNumber, kdsErr);
+        kitchenWarning = `Order ${order.orderNumber} was saved and paid, but its kitchen ticket was NOT confirmed. Notify the kitchen manually and retry ticket dispatch before preparing another bill.`;
       }
 
       // Update order history
@@ -443,6 +470,7 @@ export const usePosStore = create<PosState>((set, get) => ({
         discount: null,
         loading: false, 
         lastCompletedOrder: order,
+        error: [kitchenWarning, stockWarnings.length ? `Paid order ${order.orderNumber}: ${stockWarnings.length} inventory issue(s). Review stock movements before closing. ${stockWarnings.join('; ')}` : null].filter(Boolean).join(' | ') || null,
         ordersHistory: updatedHistory
       });
 
@@ -471,12 +499,12 @@ export const usePosStore = create<PosState>((set, get) => ({
   },
 
   loadOrdersHistory: async () => {
-    set({ ordersLoading: true });
+    set({ ordersLoading: true, ordersError: null });
     try {
       const orders = await posService.getOrders();
       set({ ordersHistory: orders, ordersLoading: false });
     } catch (err: any) {
-      set({ ordersLoading: false, error: err.message });
+      set({ ordersLoading: false, ordersError: 'Could not load order history: ' + err.message });
     }
   },
 

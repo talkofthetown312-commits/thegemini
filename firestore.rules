@@ -34,7 +34,7 @@ service cloud.firestore {
     // Users Collection
     match /users/{userId} {
       allow read: if isAuthenticated() && (request.auth.uid == userId || isManager());
-      allow write: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow write: if isAdmin();
     }
     
     // Admin & Management Collections
@@ -70,23 +70,23 @@ service cloud.firestore {
 
     // POS / Sales Data
     match /orders/{orderId} {
-      allow read: if true;
-      allow create: if true;
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
       allow update: if isAuthenticated();
       allow delete: if isAdmin();
     }
 
     match /pos_orders/{orderId} {
-      allow read: if true;
-      allow create: if true;
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
       allow update: if isAuthenticated();
       allow delete: if isAdmin();
     }
 
     // KDS / Tickets & Kitchen Stations
     match /tickets/{ticketId} {
-      allow read: if true;
-      allow create: if true;
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
       allow update, delete: if isAuthenticated();
     }
 
@@ -218,7 +218,8 @@ service cloud.firestore {
 
     // System Connection Health Check
     match /system/{document=**} {
-      allow read, write: if true;
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
     }
     
     // Default Deny

@@ -1,0 +1,68 @@
+name: TalkOS Isolated Firebase Preview
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'index.html'
+      - 'firebase.json'
+      - '.github/workflows/firebase-preview.yml'
+
+concurrency:
+  group: talkos-staging-hosting
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      VITE_FIREBASE_API_KEY: ${{ vars.TALKOS_TEST_FIREBASE_API_KEY }}
+      VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.TALKOS_TEST_FIREBASE_AUTH_DOMAIN }}
+      VITE_FIREBASE_PROJECT_ID: ${{ vars.TALKOS_TEST_FIREBASE_PROJECT_ID }}
+      VITE_FIREBASE_DATABASE_ID: ${{ vars.TALKOS_TEST_FIREBASE_DATABASE_ID }}
+      VITE_FIREBASE_STORAGE_BUCKET: ${{ vars.TALKOS_TEST_FIREBASE_STORAGE_BUCKET }}
+      VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.TALKOS_TEST_FIREBASE_MESSAGING_SENDER_ID }}
+      VITE_FIREBASE_APP_ID: ${{ vars.TALKOS_TEST_FIREBASE_APP_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Verify isolated staging configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          for key in VITE_FIREBASE_API_KEY VITE_FIREBASE_AUTH_DOMAIN VITE_FIREBASE_PROJECT_ID VITE_FIREBASE_DATABASE_ID VITE_FIREBASE_STORAGE_BUCKET VITE_FIREBASE_MESSAGING_SENDER_ID VITE_FIREBASE_APP_ID; do
+            if [ -z "${!key:-}" ]; then echo "::error::Missing staging configuration: $key"; exit 1; fi
+          done
+          if [ "$VITE_FIREBASE_PROJECT_ID" != "talkos-staging-default" ] || [ "$VITE_FIREBASE_DATABASE_ID" != "(default)" ] || [ "$VITE_FIREBASE_MESSAGING_SENDER_ID" != "93376253053" ]; then
+            echo "::error::Refusing unexpected Firebase project/database configuration"
+            exit 1
+          fi
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Lint
+        run: npm run lint
+      - name: Test
+        run: npm test
+      - name: Build PWA
+        run: npm run build:pwa
+      - name: Authenticate to staging Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/93376253053/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+          service_account: talkos-github-deployer@talkos-staging-default.iam.gserviceaccount.com
+          project_id: talkos-staging-default
+      - name: Deploy permanent staging URL (never production)
+        run: npx --yes firebase-tools deploy --only hosting --project talkos-staging-default --non-interactive
+      - name: Deploy to isolated staging preview channel
+        run: npx --yes firebase-tools hosting:channel:deploy talkos-validation --project talkos-staging-default --expires 7d --non-interactive

@@ -54,8 +54,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               email: currentUser.email,
               phoneNumber: currentUser.phoneNumber,
               displayName: currentUser.displayName || (isOwnerUid ? 'Talk of the Town (Owner)' : 'Authenticated User'),
-              roles: isOwnerUid ? ['OWNER', 'ADMIN', 'MANAGER'] : ['ADMIN', 'OWNER'],
-              permissions: ['*'],
+              roles: isOwnerUid ? ['OWNER', 'ADMIN', 'MANAGER'] : [],
+              permissions: isOwnerUid ? ['*'] : [],
               branches: ['br_main'],
               createdAt: new Date().toISOString()
             });
@@ -69,8 +69,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             email: currentUser.email,
             phoneNumber: currentUser.phoneNumber,
             displayName: currentUser.displayName || 'Authenticated User',
-            roles: ['ADMIN', 'OWNER'],
-            permissions: ['*'],
+            roles: currentUser.uid === 'DeQd1Y2YWjQt0eFjQ4iWPThuBAJ3' || currentUser.email === 'talkofthetown312@gmail.com' ? ['OWNER', 'ADMIN', 'MANAGER'] : [],
+            permissions: currentUser.uid === 'DeQd1Y2YWjQt0eFjQ4iWPThuBAJ3' || currentUser.email === 'talkofthetown312@gmail.com' ? ['*'] : [],
             branches: [],
             createdAt: new Date().toISOString()
           });

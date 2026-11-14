@@ -1,59 +1,33 @@
-import { collection, query, getDocs, doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, query, getDocs, doc, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
 import { db, auth } from '../../../core/firebase/firebaseConfig';
 import { Product, Order, MenuItemSize } from '../models/pos';
 import { INITIAL_MENU_ITEMS, getAllMenuItemSizes } from '../data/menuData';
+import { visibleCustomerProducts, sizesForCustomerProduct, validateCustomerProduct } from './customerCatalogue';
 
 class PosService {
-  private hasInitializedMenu = false;
+
+  async getAllProducts(): Promise<Product[]> {
+    // Firestore is the source of truth for the customer's menu, including
+    // newly created products, edited prices and availability.
+    if (db) {
+      const snapshot = await getDocs(query(collection(db, 'pos_products')));
+      return snapshot.docs.map(record => ({ ...record.data(), id: record.id } as Product));
+    }
+    throw new Error('Restaurant menu unavailable: database is not configured.');
+  }
 
   async getProducts(): Promise<Product[]> {
-    // 1. Prioritize authoritative backend API (cross-platform, zero 403 errors, consistent across Android, iOS, Desktop & Web)
-    try {
-      const res = await fetch('/api/products');
-      if (res.ok) {
-        const data = await res.json();
-        if (data && data.products && Array.isArray(data.products) && data.products.length > 0) {
-          return data.products;
-        }
-      }
-    } catch {
-      // Offline fallback
-    }
-
-    // 2. Query Firestore if available
-    if (db) {
-      try {
-        const q = query(collection(db, 'pos_products'));
-        const snapshot = await getDocs(q);
-
-        // ONLY seed/sync to Firestore if a staff user is logged in (prevents 403 Forbidden in guest kiosk mode)
-        if (auth.currentUser && (snapshot.empty || !this.hasInitializedMenu)) {
-          await this.syncInitialMenu(snapshot.empty);
-          this.hasInitializedMenu = true;
-          const updatedSnap = await getDocs(q);
-          if (!updatedSnap.empty) {
-            return updatedSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
-          }
-        }
-
-        if (!snapshot.empty) {
-          const products = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
-          if (products.length > 0) return products;
-        }
-      } catch (error) {
-        console.warn("Firestore fetch error, falling back to local menu items:", error);
-      }
-    }
-
-    // 3. Fallback to comprehensive built-in menu items
-    return INITIAL_MENU_ITEMS.filter(p => p.active !== false && p.isAvailable !== false && !p.isSubItem);
+    return visibleCustomerProducts(await this.getAllProducts());
   }
 
   async syncInitialMenu(isCollectionEmpty = false): Promise<void> {
     // Never attempt Firestore write if no db or if user is unauthenticated (prevents 403)
-    if (!db || !auth.currentUser) return;
+    if (!db || !auth.currentUser || !isCollectionEmpty) return;
 
     try {
+      // Seed only a genuinely empty customer menu; never overwrite configured products.
+      const existing = await getDocs(query(collection(db, 'pos_products')));
+      if (!existing.empty) return;
       // Upsert products to pos_products
       for (const item of INITIAL_MENU_ITEMS) {
         await setDoc(doc(db, 'pos_products', item.id), item, { merge: true });
@@ -71,127 +45,84 @@ class PosService {
   }
 
   async getMenuItemSizes(itemId?: string): Promise<MenuItemSize[]> {
-    // 1. Check API endpoint
-    try {
-      const res = await fetch('/api/products/sizes');
-      if (res.ok) {
-        const data = await res.json();
-        if (data && data.sizes && Array.isArray(data.sizes)) {
-          return itemId ? data.sizes.filter((s: MenuItemSize) => s.item_id === itemId) : data.sizes;
-        }
-      }
-    } catch {}
-
-    // 2. Query Firestore if available
     if (db) {
-      try {
-        const q = query(collection(db, 'menu_item_sizes'));
-        const snapshot = await getDocs(q);
-        if (!snapshot.empty) {
-          const sizes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as MenuItemSize));
-          return itemId ? sizes.filter(s => s.item_id === itemId) : sizes;
-        }
-      } catch {}
+      const snapshot = await getDocs(query(collection(db, 'pos_products')));
+      const products = snapshot.docs.map(record => ({ ...record.data(), id: record.id } as Product));
+      const sizes = products.flatMap(sizesForCustomerProduct);
+      return itemId ? sizes.filter(size => size.item_id === itemId) : sizes;
     }
-
-    // 3. Fallback
-    const sizes = getAllMenuItemSizes();
-    return itemId ? sizes.filter(s => s.item_id === itemId) : sizes;
+    throw new Error('Restaurant menu sizes unavailable: database is not configured.');
   }
 
   async addProduct(productData: Omit<Product, 'id'>): Promise<Product> {
+    if (!db || !auth.currentUser) throw new Error('Sign in to save a customer menu item.');
+    validateCustomerProduct({ ...productData, id: 'new' });
+    const id = doc(collection(db, 'pos_products')).id;
     const newProduct: Product = {
       ...productData,
-      id: `prod_${Date.now()}`
+      id,
+      sizes: productData.sizes.map(size => ({ ...size, item_id: id }))
     };
-
-    if (db) {
-      await setDoc(doc(db, 'pos_products', newProduct.id), newProduct);
-      if (newProduct.sizes) {
-        for (const s of newProduct.sizes) {
-          const sizeDocId = `${newProduct.id}_${s.size.toLowerCase()}`;
-          await setDoc(doc(db, 'menu_item_sizes', sizeDocId), {
-            ...s,
-            id: sizeDocId,
-            item_id: newProduct.id
-          });
-        }
-      }
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'pos_products', id), newProduct);
+    for (const size of newProduct.sizes) {
+      const sizeId = id + '_' + size.size.toLowerCase();
+      batch.set(doc(db, 'menu_item_sizes', sizeId), { ...size, id: sizeId });
     }
-
+    await batch.commit();
     return newProduct;
   }
 
-  private localOrders: Order[] = [];
+  async updateProduct(product: Product): Promise<void> {
+    if (!db || !auth.currentUser) throw new Error('Sign in to edit menu items.');
+    validateCustomerProduct(product);
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'pos_products', product.id), product);
+    for (const size of product.sizes) {
+      const id = product.id + '_' + size.size.toLowerCase();
+      batch.set(doc(db, 'menu_item_sizes', id), { ...size, id, item_id: product.id });
+    }
+    await batch.commit();
+  }
+
+  async setProductAvailability(productId: string, available: boolean): Promise<void> {
+    if (!db || !auth.currentUser) throw new Error('Sign in to change menu availability.');
+    if (!productId.trim()) throw new Error('Missing product ID.');
+    await updateDoc(doc(db, 'pos_products', productId), { isAvailable: available });
+  }
 
   async getOrders(): Promise<Order[]> {
-    if (!db) return this.localOrders;
-    try {
-      const q = query(collection(db, 'pos_orders'));
-      const snapshot = await getDocs(q);
-      const orders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
-      // Sort newest first
-      orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      if (orders.length > 0) {
-        this.localOrders = orders;
-        return orders;
-      }
-      return this.localOrders;
-    } catch (err) {
-      console.warn("Falling back to local orders due to error:", err);
-      return this.localOrders;
-    }
+    if (!db) throw new Error('Firestore is not configured. Order history is unavailable.');
+    const snapshot = await getDocs(query(collection(db, 'pos_orders')));
+    return snapshot.docs
+      .map(record => ({ ...record.data(), id: record.id } as Order))
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }
 
   async updateOrderStatus(orderId: string, status: Order['status'], voidReason?: string): Promise<void> {
-    const orderIndex = this.localOrders.findIndex(o => o.id === orderId);
-    if (orderIndex > -1) {
-      this.localOrders[orderIndex] = {
-        ...this.localOrders[orderIndex],
-        status,
-        ...(voidReason ? { voidReason } : {})
-      };
-    }
-
-    if (db) {
-      try {
-        await Promise.race([
-          updateDoc(doc(db, 'pos_orders', orderId), {
-            status,
-            ...(voidReason ? { voidReason } : {}),
-            updatedAt: new Date().toISOString()
-          }),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout writing to Firestore')), 1500))
-        ]);
-      } catch (err) {
-        console.warn("Could not update order status in Firestore:", err);
-      }
-    }
+    if (!db) throw new Error('Firestore is not configured. Cannot update order status.');
+    await updateDoc(doc(db, 'pos_orders', orderId), {
+      status,
+      ...(voidReason ? { voidReason } : {}),
+      updatedAt: new Date().toISOString()
+    });
   }
 
   async createOrder(orderData: Omit<Order, 'id' | 'createdAt' | 'orderNumber'>): Promise<Order> {
+    if (!db) throw new Error('Firestore is not configured. Checkout is unavailable.');
+    if (!auth.currentUser) throw new Error('Sign in before completing a sale.');
+
+    // Allocate a stable ID before writing, so a retry can use the same identity.
+    // Do not report payment/order completion unless Firestore acknowledges the write.
+    const id = doc(collection(db, 'pos_orders')).id;
     const newOrder: Order = {
       ...orderData,
-      id: `ord_${Date.now()}`,
-      orderNumber: `ORD-${Math.floor(10000 + Math.random() * 90000)}`,
+      id,
+      orderNumber: `ORD-${id.slice(0, 8).toUpperCase()}`,
       createdAt: new Date().toISOString()
     };
-
-    this.localOrders.unshift(newOrder);
-
-    if (db) {
-      try {
-        // Strip undefined values for Firestore serialization and apply timeout protection
-        const cleanOrder = JSON.parse(JSON.stringify(newOrder));
-        await Promise.race([
-          setDoc(doc(db, 'pos_orders', newOrder.id), cleanOrder),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout writing to Firestore')), 1500))
-        ]);
-      } catch (err) {
-        console.warn("Could not save order to Firestore (continuing with local order):", err);
-      }
-    }
-
+    const cleanOrder = JSON.parse(JSON.stringify(newOrder));
+    await setDoc(doc(db, 'pos_orders', id), cleanOrder);
     return newOrder;
   }
 }

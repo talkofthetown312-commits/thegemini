@@ -17,6 +17,7 @@ import { DashboardPage } from '../features/dashboard/pages/DashboardPage';
 
 // POS
 import { PosPage } from '../features/pos/pages/PosPage';
+import { MenuManagementPage } from '../features/pos/pages/MenuManagementPage';
 
 // KDS
 import { KdsPage } from '../features/kds/pages/KdsPage';
@@ -26,6 +27,7 @@ import { PurchasingPage } from '../features/purchasing/pages/PurchasingPage';
 
 // Inventory
 import { InventoryPage } from '../features/inventory/pages/InventoryPage';
+import { OfflineInventoryPage } from '../features/inventory/pages/OfflineInventoryPage';
 
 // CRM
 import { CrmPage } from '../features/crm/pages/CrmPage';
@@ -69,7 +71,18 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+// Keep the offline catalogue Android-only. It does not authorize staff access.
+function AndroidOnlyInventory() {
+  const native = typeof window !== 'undefined' && (
+    Boolean((window as any).Capacitor?.isNativePlatform?.()) ||
+    (window.location.hostname === 'localhost' && window.location.protocol === 'https:')
+  );
+  return native ? <OfflineInventoryPage /> : <Navigate to="/auth" replace />;
+}
+
 export const router = createBrowserRouter([
+  // Bundled Android-only read-only catalogue. No Firestore / POS access.
+  { path: '/offline-inventory', element: <AndroidOnlyInventory /> },
   // Public Customer Facing Routes (No Staff Auth Required)
   {
     path: '/kiosk',
@@ -105,6 +118,10 @@ export const router = createBrowserRouter([
       {
         path: 'pos',
         element: <PosPage />,
+      },
+      {
+        path: 'menu',
+        element: <MenuManagementPage />,
       },
       {
         path: 'kds',

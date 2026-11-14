@@ -4,7 +4,7 @@ import { Plus, Edit2, Trash2, Search, Filter } from 'lucide-react';
 import { ItemForm } from './ItemForm';
 
 export function ItemMaster() {
-  const { items, categories, deleteItem } = useInventoryStore();
+  const { items, categories } = useInventoryStore();
   const [searchTerm, setSearchTerm] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [selectedItem, setSelectedItem] = useState<string | null>(null);
@@ -65,7 +65,7 @@ export function ItemMaster() {
                   {getCategoryName(item.categoryId)}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-right">
-                  <div className={`text-sm font-bold ${item.currentStock <= item.minimumStock ? 'text-red-600 dark:text-red-400' : 'text-slate-900 dark:text-white'}`}>
+                  <div className={`text-sm font-bold ${item.status === 'ACTIVE' && item.minimumStock > 0 && item.currentStock <= item.minimumStock ? 'text-red-600 dark:text-red-400' : 'text-slate-900 dark:text-white'}`}>
                     {item.currentStock} {item.unit}
                   </div>
                   {item.currentStock <= item.minimumStock && (
@@ -85,12 +85,10 @@ export function ItemMaster() {
                   </span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                  <button className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 mr-3 transition-colors">
+                  <button aria-label={`Edit ${item.name}`} onClick={() => { setSelectedItem(item.id); setShowForm(true); }} className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 mr-3 transition-colors">
                     <Edit2 className="w-4 h-4 inline" />
                   </button>
-                  <button onClick={() => deleteItem(item.id)} className="text-red-600 hover:text-red-900 dark:text-red-400 transition-colors">
-                    <Trash2 className="w-4 h-4 inline" />
-                  </button>
+                  <span className="text-xs text-slate-400">Retained</span>
                 </td>
               </tr>
             ))}
@@ -106,7 +104,7 @@ export function ItemMaster() {
       </div>
 
       {showForm && (
-        <ItemForm onClose={() => setShowForm(false)} />
+        <ItemForm item={items.find(item => item.id === selectedItem)} onClose={() => { setShowForm(false); setSelectedItem(null); }} />
       )}
     </div>
   );

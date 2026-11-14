@@ -3,7 +3,7 @@ import { NavLink } from 'react-router-dom';
 import { 
   LayoutDashboard, ShoppingCart, ChefHat, Package, Users, Settings, 
   CreditCard, CalendarClock, Truck, Sparkles, FileBarChart, Armchair, Factory,
-  Globe, Monitor, QrCode
+  Globe, Monitor, QrCode, UtensilsCrossed, X
 } from 'lucide-react';
 import { useAuth } from '../../core/auth/AuthContext';
 
@@ -18,6 +18,7 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
   const navigation = [
     { name: 'Dashboard', to: '/', icon: LayoutDashboard, roles: ['OWNER', 'ADMIN', 'MANAGER', 'CASHIER', 'KITCHEN', 'INVENTORY', 'HR', 'ACCOUNTANT'] },
     { name: 'POS', to: '/pos', icon: ShoppingCart, roles: ['OWNER', 'ADMIN', 'MANAGER', 'CASHIER'] },
+    { name: 'Menu', to: '/menu', icon: UtensilsCrossed, roles: ['OWNER', 'ADMIN', 'MANAGER'] },
     { name: 'Kitchen', to: '/kds', icon: ChefHat, roles: ['OWNER', 'ADMIN', 'MANAGER', 'KITCHEN'] },
     { name: 'Tables', to: '/tables', icon: Armchair, roles: ['OWNER', 'ADMIN', 'MANAGER', 'CASHIER'] },
     { name: 'Inventory', to: '/inventory', icon: Package, roles: ['OWNER', 'ADMIN', 'MANAGER', 'INVENTORY'] },
@@ -33,7 +34,7 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
   ];
 
   // If no roles are set, default to show all for demo purposes, or filter strictly
-  const userRoles = profile?.roles || ['OWNER']; // Fallback for dev
+  const userRoles = profile?.roles || []; // Never treat a missing staff profile as owner
 
   const filteredNav = navigation.filter(item => 
     item.roles.some(role => userRoles.includes(role))
@@ -50,13 +51,13 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
       )}
 
       {/* Sidebar */}
-      <aside className={`
+      <aside id="app-sidebar" aria-label="Main navigation" className={`
         fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-[#ebd5da]
         transform transition-transform duration-300 ease-in-out flex flex-col
         lg:relative lg:translate-x-0
         ${isOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
-        <div className="h-16 flex items-center px-6 border-b border-[#ebd5da]">
+        <div className="h-16 shrink-0 flex items-center justify-between px-6 border-b border-[#ebd5da]">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 bg-[#800000] rounded-lg flex items-center justify-center shadow-xs">
               <span className="text-white font-bold text-xl leading-none">T</span>
@@ -66,9 +67,12 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
               <span className="text-[10px] font-semibold tracking-widest text-[#800000]/70 uppercase -mt-1">Enterprise</span>
             </div>
           </div>
+          <button type="button" aria-label="Close menu" onClick={() => setIsOpen(false)} className="lg:hidden p-2 -mr-2 rounded-lg hover:bg-[#fdf5f6]">
+            <X className="h-5 w-5" />
+          </button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
+        <nav className="flex-1 min-h-0 overflow-y-auto py-4 px-3 space-y-1">
           {filteredNav.map((item) => (
             <NavLink
               key={item.name}
@@ -112,8 +116,8 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
 
           <div className="bg-[#fdf5f6] border border-[#ebd5da] rounded-xl p-3">
             <h4 className="text-[11px] font-bold text-[#800000]/80 uppercase tracking-wider mb-0.5">Branch</h4>
-            <p className="text-sm font-bold text-[#800000] truncate">Main Downtown</p>
-            <p className="text-xs text-[#800000]/70">Terminal 01</p>
+            <p className="text-sm font-bold text-[#800000] truncate">Talk of the Town · Imphal</p>
+            <p className="text-xs text-[#800000]/70">Terminal not configured</p>
           </div>
         </div>
       </aside>

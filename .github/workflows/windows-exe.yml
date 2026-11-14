@@ -1,0 +1,80 @@
+name: TalkOS Windows EXE (Staging)
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/windows-exe.yml'
+      - 'assets/icon.png'
+      - 'src/**'
+      - 'public/**'
+      - 'index.html'
+concurrency:
+  group: talkos-windows-staging
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+jobs:
+  windows-exe:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    env:
+      VITE_FIREBASE_API_KEY: ${{ vars.TALKOS_TEST_FIREBASE_API_KEY }}
+      VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.TALKOS_TEST_FIREBASE_AUTH_DOMAIN }}
+      VITE_FIREBASE_PROJECT_ID: ${{ vars.TALKOS_TEST_FIREBASE_PROJECT_ID }}
+      VITE_FIREBASE_DATABASE_ID: ${{ vars.TALKOS_TEST_FIREBASE_DATABASE_ID }}
+      VITE_FIREBASE_STORAGE_BUCKET: ${{ vars.TALKOS_TEST_FIREBASE_STORAGE_BUCKET }}
+      VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.TALKOS_TEST_FIREBASE_MESSAGING_SENDER_ID }}
+      VITE_FIREBASE_APP_ID: ${{ vars.TALKOS_TEST_FIREBASE_APP_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Confirm staging project
+        shell: bash
+        run: |
+          test "$VITE_FIREBASE_PROJECT_ID" = "talkos-staging-default"
+          test "$VITE_FIREBASE_DATABASE_ID" = "(default)"
+          test "$VITE_FIREBASE_MESSAGING_SENDER_ID" = "93376253053"
+          test -n "$VITE_FIREBASE_API_KEY"
+          test -n "$VITE_FIREBASE_APP_ID"
+      - run: npm ci --no-audit --no-fund
+      - run: npm run lint
+      - run: npm test
+      - name: Install Electron packaging tools separately
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:RUNNER_TEMP\\talkos-electron-tools" | Out-Null
+          Push-Location "$env:RUNNER_TEMP\\talkos-electron-tools"
+          npm init -y
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm install --no-audit --no-fund --save-dev --save-exact electron@37 electron-builder@26
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Pop-Location
+      - name: Build existing TalkOS Electron application
+        run: npm run build:electron
+      - name: Package Windows portable EXE
+        shell: pwsh
+        run: |
+          $toolsDir = Join-Path $env:RUNNER_TEMP 'talkos-electron-tools'
+          Copy-Item -Recurse -Force "$env:GITHUB_WORKSPACE\\dist" "$toolsDir\\dist"
+          Copy-Item -Recurse -Force "$env:GITHUB_WORKSPACE\\dist-electron" "$toolsDir\\dist-electron"
+          Copy-Item -Recurse -Force "$env:GITHUB_WORKSPACE\\assets" "$toolsDir\\assets"
+          Copy-Item -Force "$env:GITHUB_WORKSPACE\\electron-builder.yml" "$toolsDir\\electron-builder.yml"
+          Push-Location $toolsDir
+          npm pkg set name=talkos version=0.1.0 main=dist-electron/main.cjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & "$toolsDir\\node_modules\\.bin\\electron-builder.cmd" --win portable --publish never --config electron-builder.yml
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Pop-Location
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TalkOS-Windows-STAGING-EXE
+          path: ${{ runner.temp }}/talkos-electron-tools/release/*.exe
+          if-no-files-found: error
+          retention-days: 7

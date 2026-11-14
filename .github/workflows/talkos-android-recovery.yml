@@ -1,0 +1,96 @@
+name: TalkOS Android Recovery Unsigned Bundle
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/talkos-android-recovery.yml'
+      - 'src/**'
+      - 'ci/**'
+      - 'index.html'
+      - 'vite.config.ts'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      TALKOS_NATIVE_ANDROID: '1'
+      VITE_FIREBASE_API_KEY: ${{ vars.TALKOS_TEST_FIREBASE_API_KEY }}
+      VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.TALKOS_TEST_FIREBASE_AUTH_DOMAIN }}
+      VITE_FIREBASE_PROJECT_ID: ${{ vars.TALKOS_TEST_FIREBASE_PROJECT_ID }}
+      VITE_FIREBASE_DATABASE_ID: ${{ vars.TALKOS_TEST_FIREBASE_DATABASE_ID }}
+      VITE_FIREBASE_STORAGE_BUCKET: ${{ vars.TALKOS_TEST_FIREBASE_STORAGE_BUCKET }}
+      VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.TALKOS_TEST_FIREBASE_MESSAGING_SENDER_ID }}
+      VITE_FIREBASE_APP_ID: ${{ vars.TALKOS_TEST_FIREBASE_APP_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Check project staging identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$VITE_FIREBASE_PROJECT_ID" = "talkos-staging-default"
+          test "$VITE_FIREBASE_DATABASE_ID" = "(default)"
+          test "$VITE_FIREBASE_MESSAGING_SENDER_ID" = "93376253053"
+      - run: npm ci --no-audit --no-fund
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build:pwa
+      - name: Retire legacy service worker
+        run: cp ci/android-sw-retire.js dist/sw.js
+      - name: Install isolated Capacitor build tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/talkos-recovery
+          cd /tmp/talkos-recovery
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund --save-exact @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 typescript@5 @capacitor/assets@3 sharp@0.34
+          mkdir -p assets
+          cp "$GITHUB_WORKSPACE/assets/icon.png" assets/icon.png
+          node -e "const sharp=require('sharp'),fs=require('fs');sharp('assets/icon.png').resize(1024,1024).toBuffer().then(data=>fs.writeFileSync('assets/icon.png',data)).catch(e=>{console.error(e);process.exit(1)})"
+          ln -s "$GITHUB_WORKSPACE"/dist dist
+          cp "$GITHUB_WORKSPACE"/capacitor.config.ts ./capacitor.config.ts
+          node -e "const fs=require('fs');const p=require('./package.json');p.type='module';fs.writeFileSync('package.json',JSON.stringify(p,null,2))"
+      - name: Generate Android app and compile UNsigned release
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd /tmp/talkos-recovery
+          ./node_modules/.bin/cap add android
+          ./node_modules/.bin/cap sync android
+          ./node_modules/.bin/capacitor-assets generate --android --iconBackgroundColor '#000000' --iconBackgroundColorDark '#000000' --splashBackgroundColor '#000000' --splashBackgroundColorDark '#000000'
+          sed -i -E "s/versionCode [0-9]+/versionCode $((500000 + GITHUB_RUN_NUMBER))/" android/app/build.gradle
+          grep -q "applicationId 'com.talkofthetown.pos'" android/app/build.gradle || grep 'applicationId' android/app/build.gradle
+          cd android
+          ./gradlew assembleRelease --no-daemon
+      - name: Export unsigned app and Android signer tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          tools="$sdk/build-tools/35.0.0"
+          test -x "$tools/apksigner" && test -x "$tools/zipalign"
+          test -s /tmp/talkos-recovery/android/app/build/outputs/apk/release/app-release-unsigned.apk
+          mkdir -p recovery-export/sdk
+          cp /tmp/talkos-recovery/android/app/build/outputs/apk/release/app-release-unsigned.apk recovery-export/TalkOS-REBUILD-unsigned.apk
+          cp "$tools"/apksigner "$tools"/aapt "$tools"/zipalign recovery-export/sdk/
+          cp -r "$tools/lib" recovery-export/sdk/
+          chmod +x recovery-export/sdk/apksigner recovery-export/sdk/zipalign recovery-export/sdk/aapt
+          echo "APK signing intentionally deferred to a PRIVATE retained key; no key is shipped in this public artifact."
+          du -h recovery-export/TalkOS-REBUILD-unsigned.apk recovery-export/sdk/lib/apksigner.jar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TalkOS-Android-recovery-unsigned-tools
+          path: recovery-export/
+          retention-days: 7
+          if-no-files-found: error
